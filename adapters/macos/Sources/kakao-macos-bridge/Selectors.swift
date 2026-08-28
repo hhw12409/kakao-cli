@@ -31,7 +31,9 @@ struct SelectorMap {
     // --- conversation window ---
     /// `AXIdentifier` of the AXTable holding message rows.
     var messageTableIdentifier: String
-    /// `AXDescription` of the compose text area.
+    /// `AXIdentifier` of the compose text area.
+    var composeFieldIdentifier: String
+    /// `AXDescription` of the compose text area (fallback / cross-check).
     var composeFieldDescription: String
     /// `AXTitle` of the send button.
     var sendButtonTitle: String
@@ -58,6 +60,7 @@ struct SelectorMap {
         roomTimestampIdentifier: "_NS:69",
         roomPreviewIdentifier: "_NS:91",
         messageTableIdentifier: "_NS:33",
+        composeFieldIdentifier: "_NS:51",
         composeFieldDescription: "메시지 입력",
         sendButtonTitle: "전송"
     )
