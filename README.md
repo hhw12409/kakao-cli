@@ -59,12 +59,13 @@ kakao-cli send "개발팀" "배포 완료" --dry-run
 ### macOS — Homebrew tap
 
 ```bash
-brew install hhw12409/tap/kakao-cli
+# 릴리스 태그 전까지는 git 에서 빌드:
+brew install --HEAD hhw12409/tap/kakao-cli
 kakao-cli doctor
 ```
 
 formula 가 소스에서 빌드한다 (`cargo` + `swift`). 최초 설치는 1~3분 걸린다. 로컬
-빌드 바이너리라 Gatekeeper 차단창이 없다.
+빌드 바이너리라 Gatekeeper 차단창이 없다. (formula: `packaging/homebrew/kakao-cli.rb`)
 
 ### Windows — Scoop (로드맵)
 
@@ -83,12 +84,18 @@ scoop install kakao-cli
 ```bash
 git clone https://github.com/hhw12409/kakao-cli
 cd kakao-cli
-cargo build --release                                   # 공통부 -> target/release/kakao-cli
-swift build -c release --package-path adapters/macos     # macOS 브리지
+./scripts/build-release.sh dist     # cargo + swift 빌드 + ad-hoc 서명 + 레이아웃
+dist/bin/kakao-cli doctor
 ```
 
-개발 실행 시 브리지 경로를 알려준다:
-`KAKAO_CLI_BRIDGE_PATH=adapters/macos/.build/release/kakao-macos-bridge kakao-cli doctor`
+개별 빌드로 개발할 때는 브리지 경로를 알려준다:
+
+```bash
+cargo build
+swift build --package-path adapters/macos
+KAKAO_CLI_BRIDGE_PATH=adapters/macos/.build/debug/kakao-macos-bridge \
+  ./target/debug/kakao-cli doctor
+```
 
 ## 개인정보
 

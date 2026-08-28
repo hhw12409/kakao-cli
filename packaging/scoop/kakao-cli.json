@@ -1,0 +1,26 @@
+{
+  "$comment": "Scoop manifest for kakao-cli. Belongs in github.com/hhw12409/scoop-bucket at bucket/kakao-cli.json. DRAFT — the Windows adapter (adapters/windows) is not implemented yet, so there is no release artifact to point at. Fill in url/hash once a Windows build exists.",
+  "version": "0.1.0",
+  "description": "카카오톡 텍스트 채팅을 터미널에서 처리하는 CLI",
+  "homepage": "https://github.com/hhw12409/kakao-cli",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/hhw12409/kakao-cli/releases/download/v0.1.0/kakao-cli-windows-x64.zip",
+      "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "bin": [["bin\\kakao-cli.exe"]],
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/hhw12409/kakao-cli/releases/download/v$version/kakao-cli-windows-x64.zip"
+      }
+    }
+  },
+  "notes": [
+    "카카오톡 데스크톱 앱이 실행 중이어야 합니다.",
+    "진단:  kakao-cli doctor"
+  ]
+}
