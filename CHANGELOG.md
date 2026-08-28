@@ -39,13 +39,20 @@ macOS PoC → `send` 완성 → Windows 어댑터 → inbox/검색.
 - 문서: `README.md`, `docs/errors.md`, `docs/command-spec.md`, `docs/db-schema.sql`,
   `docs/packaging.md`, `docs/help/`.
 
+### 라이브 검증 (KakaoTalk 26.6.1, 2026-08-29)
+
+- `doctor` / `inbox` / `rooms` / `open` / `search` / **`send`** 모두 실제 카카오톡에서 동작 확인.
+- `send`: 방 열기(창 raise + 더블클릭 — 목록 행에 AX 액션 없음) → 입력창 `AXValue`
+  설정 → 전송 버튼 위치 클릭 합성(버튼 `AXPress` 무반응) → 메시지 영역 맨 아래로
+  스크롤 후 폴링 검증. `✓ 황현우에 전송됨  03:24` 확인. 상태 머신 정상.
+- 성능: `listRooms` 배치 AX 읽기 + 40행 제한으로 23s → 2.3s.
+
 ### 알려진 제한
 
-- `listRooms` 등은 **카카오톡 창이 보일 때만** 동작한다. 창 최소화 시
-  `kAXWindowsAttribute` 가 비어 `KAKAO_WINDOW_NOT_VISIBLE`(exit 4)로 안내한다
-  (0.1초 내). 창이 열려 있는 상태의 실측 파싱은 아직 미검증.
-- `readRecent` 의 `outgoing`/`sender` 판정 미구현 (self-chat 덤프만 있어 발신자
-  신호를 못 찾음). 현재 `sender: ""`, `outgoing: false`. 그룹 채팅 덤프 필요.
-- `roomId` 는 세션 한정 `"row:N"` (목록 행 인덱스). 세션 간 안정성 없음 (계약 허용).
-- Windows 어댑터 미구현.
-- 빌드에 ad-hoc `codesign` 단계 미포함 (packaging 단계에서 추가 예정).
+- 읽기는 카카오톡 창이 보일 때만 동작 (최소화 시 `KAKAO_WINDOW_NOT_VISIBLE`,
+  0.1초). `openRoom`/`sendText` 는 방 열기 시 메인 창을 잠시 활성화한다.
+- 카카오톡 메시지 목록은 가상화(virtualized) — 화면 밖 메시지는 AX 트리에 없음.
+  `readRecent`/검증은 스크롤 후 읽지만, 매우 긴 대화는 여전히 최근 N개만.
+- `outgoing`/내 메시지 `sender` 판정 미완 (내 메시지엔 발신자 라벨이 없음).
+- `roomId` 는 세션 한정 `"row:N"`.
+- Windows 어댑터 미구현. 빌드에 ad-hoc `codesign` 단계 미포함.

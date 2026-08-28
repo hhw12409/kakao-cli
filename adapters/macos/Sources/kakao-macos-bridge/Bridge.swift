@@ -1,6 +1,7 @@
 import Foundation
 import ApplicationServices
 import CoreGraphics
+import AppKit
 
 /// The five contract functions, live against KakaoTalk.
 ///
@@ -64,6 +65,33 @@ enum Bridge {
         windows(ctx).first { $0.title == title && $0.identifier != ctx.selectors.mainWindowIdentifier }
     }
 
+    /// The element under which the open conversation for `title` lives: a
+    /// popped-out window titled with the room name, or (fallback) the main
+    /// window, where the conversation renders in an embedded pane.
+    static func conversationContainer(_ ctx: Context, title: String) -> AXElement? {
+        if let separate = conversationWindow(ctx, title: title) { return separate }
+        return try? mainWindow(ctx)
+    }
+
+    /// Find the message table in either container shape.
+    static func conversationTable(_ ctx: Context, container: AXElement) -> AXElement? {
+        findTable(container, identifier: ctx.selectors.messageTableIdentifier)
+    }
+
+    /// KakaoTalk's message list is a virtualised NSTableView: only on-screen
+    /// rows exist in the AX tree. Scroll the message area to the bottom so the
+    /// newest messages are actually present before we read them.
+    static func scrollMessagesToBottom(_ ctx: Context, container: AXElement) {
+        for child in AX.elements(container.raw, kAXChildrenAttribute as String) {
+            let v = AX.multi(child, [kAXRoleAttribute as String, kAXIdentifierAttribute as String])
+            guard v[0] as? String == "AXScrollArea",
+                  v[1] as? String == ctx.selectors.messageScrollAreaIdentifier
+            else { continue }
+            for _ in 0..<6 { AX.perform(child, "AXScrollDownByPage") }
+            return
+        }
+    }
+
     /// How many chat rows / messages to pull. KakaoTalk's per-AX-call latency is
     /// high; a full 100+ row list read takes ~20s. `inbox`/`rooms` only need the
     /// most recent rooms (the list is already in recency order).
@@ -125,14 +153,54 @@ enum Bridge {
         roomId.hasPrefix("row:") ? Int(roomId.dropFirst(4)) : nil
     }
 
-    /// Activate a chat row without raising the app: press the row, then its cell.
-    static func openRow(_ row: AXElement) -> Bool {
-        if AX.perform(row.raw, kAXPressAction as String) { return true }
-        AX.setValue(row.raw, kAXSelectedAttribute as String, kCFBooleanTrue as CFTypeRef)
-        if let cell = row.firstDescendant(where: { $0.role == "AXCell" }) as? AXElement {
-            return AX.perform(cell.raw, kAXPressAction as String)
+    /// Activate a chat row so its conversation opens.
+    ///
+    /// KakaoTalk's list rows advertise NO accessibility action (`row actions:
+    /// []`, `cell actions: ["AXShowMenu"]`) — verified with `--actions`. There
+    /// is no AX way to open a chat, so this is the documented last resort: a
+    /// synthesised mouse click at the row's accessibility frame. `AXPosition`
+    /// is in screen points, so this is independent of resolution / DPI / window
+    /// placement (unlike a hard-coded pixel offset).
+    @discardableResult
+    static func openRow(_ ctx: Context, _ row: AXElement) -> Bool {
+        let target = (row.firstDescendant(where: { $0.role == "AXCell" }) as? AXElement) ?? row
+        guard let f = AX.frame(target.raw) else { return false }
+        let center = CGPoint(x: f.midX, y: f.midY)
+
+        // A synthesised click only reaches a control if KakaoTalk's window is
+        // the front window; otherwise macOS consumes the first click just to
+        // activate it. `openRoom`/`sendText` are the state-changing calls, so a
+        // brief raise here is an accepted trade-off (contract §2).
+        if let main = try? mainWindow(ctx) {
+            AX.perform(main.raw, "AXRaise")
         }
-        return false
+        AX.setValue(ctx.appRaw, "AXFrontmost", kCFBooleanTrue as CFTypeRef)
+        Thread.sleep(forTimeInterval: 0.15)
+
+        let src = CGEventSource(stateID: .hidSystemState)
+        // Double click: KakaoTalk opens a chat on double-click of a list row.
+        for click in 1...2 {
+            for down in [true, false] {
+                guard let ev = CGEvent(
+                    mouseEventSource: src,
+                    mouseType: down ? .leftMouseDown : .leftMouseUp,
+                    mouseCursorPosition: center,
+                    mouseButton: .left
+                ) else { return false }
+                if click == 2 { ev.setIntegerValueField(.mouseEventClickState, value: 2) }
+                ev.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: 0.03)
+            }
+        }
+        return true
+    }
+
+    /// Actions an element advertises (for the `--actions` debug command).
+    static func actions(_ element: AXUIElement) -> [String] {
+        var names: CFArray?
+        guard AXUIElementCopyActionNames(element, &names) == .success,
+              let arr = names as? [String] else { return [] }
+        return arr
     }
 
     // MARK: listRooms
@@ -158,7 +226,7 @@ enum Bridge {
     static func openRoom(roomId: String) throws {
         let ctx = try context()
         let (row, _) = try resolveRoom(ctx, roomId: roomId)
-        if !openRow(row) {
+        if !openRow(ctx, row) {
             throw BridgeError(.uiElementNotFound, "could not activate chat row")
         }
     }
@@ -168,27 +236,37 @@ enum Bridge {
     static func readRecent(roomId: String, limit: Int) throws -> ReadRecentData {
         let ctx = try context()
         let (row, title) = try resolveRoom(ctx, roomId: roomId)
-
-        var win = conversationWindow(ctx, title: title)
-        if win == nil {
-            _ = openRow(row)
-            win = pollForWindow(ctx, title: title, timeout: 2.0)
-        }
-        guard let conversation = win else {
-            throw BridgeError(.uiElementNotFound, "conversation window for \(title)")
-        }
-        guard let messages = readMessages(ctx, conversation: conversation, want: max(limit, 1)) else {
+        let container = try openConversation(ctx, row: row, title: title)
+        scrollMessagesToBottom(ctx, container: container)
+        Thread.sleep(forTimeInterval: 0.2)
+        guard let table = conversationTable(ctx, container: container) else {
             throw BridgeError(.uiElementNotFound, "message table \(ctx.selectors.messageTableIdentifier)")
         }
-        return ReadRecentData(messages: messages)
+        return ReadRecentData(messages: readMessages(ctx, table: table, want: max(limit, 1)))
+    }
+
+    /// Ensure the conversation for `title` is open and return its container
+    /// (a popped-out window, or the main window for the embedded pane). Tries
+    /// already-open first, then a synthesised click on the list row.
+    static func openConversation(_ ctx: Context, row: AXElement, title: String) throws -> AXElement {
+        if let c = conversationContainer(ctx, title: title),
+           conversationTable(ctx, container: c) != nil {
+            return c
+        }
+        openRow(ctx, row)
+        let deadline = Date().addingTimeInterval(3.0)
+        while Date() < deadline {
+            if let c = conversationContainer(ctx, title: title),
+               conversationTable(ctx, container: c) != nil {
+                return c
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        throw BridgeError(.uiElementNotFound, "conversation for \(title) did not open")
     }
 
     /// Snapshot the tail of the message table in batched reads and parse it.
-    /// Returns `nil` only when the table can't be found.
-    static func readMessages(_ ctx: Context, conversation: AXElement, want: Int) -> [Message]? {
-        guard let table = findTable(conversation, identifier: ctx.selectors.messageTableIdentifier)
-        else { return nil }
-
+    static func readMessages(_ ctx: Context, table: AXElement, want: Int) -> [Message] {
         let rowEls = AX.elements(table.raw, kAXChildrenAttribute as String)
         // Messages are oldest->newest; take the tail plus slack for spacer rows
         // and the trailing AXColumn.
@@ -207,15 +285,6 @@ enum Bridge {
         return all.count > want ? Array(all.suffix(want)) : all
     }
 
-    private static func pollForWindow(_ ctx: Context, title: String, timeout: TimeInterval) -> AXElement? {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if let w = conversationWindow(ctx, title: title) { return w }
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-        return nil
-    }
-
     // MARK: sendText
 
     static func sendText(roomId: String, text: String) throws -> SendResult {
@@ -224,51 +293,113 @@ enum Bridge {
         let ctx: Context
         let row: AXElement
         let title: String
+        let container: AXElement
         do {
             ctx = try context()
             (row, title) = try resolveRoom(ctx, roomId: roomId)
+            container = try openConversation(ctx, row: row, title: title)
         } catch let e as BridgeError {
             return SendResult(status: .failed, at: nil, error: e.code)
         }
 
-        var win = conversationWindow(ctx, title: title)
-        if win == nil {
-            _ = openRow(row)
-            win = pollForWindow(ctx, title: title, timeout: 2.0)
-        }
-        guard let conversation = win else {
-            return SendResult(status: .failed, at: nil, error: .uiElementNotFound)
-        }
-
-        guard let field = findComposeField(conversation, selectors: ctx.selectors) else {
+        guard let field = findComposeField(container, selectors: ctx.selectors) else {
             return SendResult(status: .failed, at: nil, error: .sendInputFailed)
         }
 
-        // Whole body as the field value: newlines land literally, no collision
-        // with the Enter-to-send shortcut.
-        if !AX.setValue(field.raw, kAXValueAttribute as String, text as CFTypeRef) {
-            // TODO(PoC): NSPasteboard + Cmd-V synth fallback.
+        if !enterText(text, into: field) {
             return SendResult(status: .failed, at: nil, error: .sendInputFailed)
         }
 
-        let pressed = pressSendButton(in: conversation, selectors: ctx.selectors)
-            || pressReturn(in: field)
-        if !pressed {
-            return SendResult(status: .failed, at: nil, error: .sendInputFailed)
+        // The 전송 button advertises no AX action, so trigger the send with a
+        // real click on its frame, then fall back to Enter in the (focused,
+        // raised) compose field. Both need the window frontmost.
+        AX.setValue(ctx.appRaw, "AXFrontmost", kCFBooleanTrue as CFTypeRef)
+        AX.setValue(field.raw, kAXFocusedAttribute as String, kCFBooleanTrue as CFTypeRef)
+        Thread.sleep(forTimeInterval: 0.1)
+
+        if !clickSendButton(in: container, selectors: ctx.selectors) {
+            _ = pressReturn(in: field)
         }
 
-        return verifySend(ctx, text: text, conversation: conversation)
+        return verifySend(ctx, text: text, container: container)
     }
 
-    private static func pressSendButton(in conversation: AXElement, selectors: SelectorMap) -> Bool {
-        // The send button is a direct child of the conversation window.
-        for child in AX.elements(conversation.raw, kAXChildrenAttribute as String) {
+    /// Put `text` into the compose field. KakaoTalk's compose area does not
+    /// accept `AXUIElementSetAttributeValue(kAXValue)` reliably, so we focus it
+    /// and paste from the clipboard (restoring the previous clipboard after).
+    /// Newlines survive because paste inserts them literally rather than firing
+    /// the Enter-to-send shortcut.
+    private static func enterText(_ text: String, into field: AXElement) -> Bool {
+        // Try the direct route first; harmless if it silently no-ops.
+        AX.setValue(field.raw, kAXValueAttribute as String, text as CFTypeRef)
+        if AX.string(field.raw, kAXValueAttribute as String) == text { return true }
+
+        // Clipboard paste fallback.
+        let pb = NSPasteboard.general
+        let saved = pb.pasteboardItems?.compactMap { item -> (NSPasteboard.PasteboardType, Data)? in
+            item.types.first.flatMap { t in item.data(forType: t).map { (t, $0) } }
+        }
+
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+
+        AX.setValue(field.raw, kAXFocusedAttribute as String, kCFBooleanTrue as CFTypeRef)
+        Thread.sleep(forTimeInterval: 0.05)
+        pressCmdV()
+        Thread.sleep(forTimeInterval: 0.15)
+
+        let ok = (AX.string(field.raw, kAXValueAttribute as String) ?? "").contains(
+            text.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+
+        // Restore the previous clipboard.
+        pb.clearContents()
+        if let saved, !saved.isEmpty {
+            for (type, data) in saved { pb.setData(data, forType: type) }
+        }
+        return ok
+    }
+
+    private static func pressCmdV() {
+        let src = CGEventSource(stateID: .hidSystemState)
+        let vKey: CGKeyCode = 0x09
+        for down in [true, false] {
+            guard let ev = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: down)
+            else { return }
+            ev.flags = .maskCommand
+            ev.post(tap: .cghidEventTap)
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+    }
+
+    /// Click the 전송 button at its accessibility frame. `AXPress` on it is a
+    /// no-op (the button advertises no actions), so a synthesised click is the
+    /// only way. Returns false if the button can't be located.
+    private static func clickSendButton(in container: AXElement, selectors: SelectorMap) -> Bool {
+        for child in AX.elements(container.raw, kAXChildrenAttribute as String) {
             let v = AX.multi(child, [kAXRoleAttribute as String, kAXTitleAttribute as String])
-            if v[0] as? String == "AXButton", v[1] as? String == selectors.sendButtonTitle {
-                return AX.perform(child, kAXPressAction as String)
-            }
+            guard v[0] as? String == "AXButton", v[1] as? String == selectors.sendButtonTitle
+            else { continue }
+            _ = AX.perform(child, kAXPressAction as String)   // harmless if unsupported
+            guard let f = AX.frame(child) else { return false }
+            clickAt(CGPoint(x: f.midX, y: f.midY))
+            return true
         }
         return false
+    }
+
+    private static func clickAt(_ p: CGPoint) {
+        let src = CGEventSource(stateID: .hidSystemState)
+        for down in [true, false] {
+            guard let ev = CGEvent(
+                mouseEventSource: src,
+                mouseType: down ? .leftMouseDown : .leftMouseUp,
+                mouseCursorPosition: p,
+                mouseButton: .left
+            ) else { return }
+            ev.post(tap: .cghidEventTap)
+            Thread.sleep(forTimeInterval: 0.03)
+        }
     }
 
     /// The compose field is `AXScrollArea(_NS:47) > AXTextArea(_NS:51)`, a
@@ -308,16 +439,17 @@ enum Bridge {
     private static func verifySend(
         _ ctx: Context,
         text: String,
-        conversation: AXElement
+        container: AXElement
     ) -> SendResult {
         let deadline = Date().addingTimeInterval(3.0)
         let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
         while Date() < deadline {
-            if let msgs = readMessages(ctx, conversation: conversation, want: 6),
-               msgs.contains(where: { $0.text.contains(needle) }) {
+            scrollMessagesToBottom(ctx, container: container)
+            if let table = conversationTable(ctx, container: container),
+               readMessages(ctx, table: table, want: 6).contains(where: { $0.text.contains(needle) }) {
                 return SendResult(status: .sent, at: ISO8601.now(), error: nil)
             }
-            Thread.sleep(forTimeInterval: 0.2)
+            Thread.sleep(forTimeInterval: 0.25)
         }
         return SendResult(status: .unknown, at: nil, error: .sendVerifyTimeout)
     }

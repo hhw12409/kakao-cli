@@ -29,6 +29,8 @@ struct SelectorMap {
     var roomPreviewIdentifier: String
 
     // --- conversation window ---
+    /// `AXIdentifier` of the AXScrollArea wrapping the message table.
+    var messageScrollAreaIdentifier: String
     /// `AXIdentifier` of the AXTable holding message rows.
     var messageTableIdentifier: String
     /// `AXIdentifier` of the compose text area.
@@ -59,6 +61,7 @@ struct SelectorMap {
         roomMemberCountIdentifier: "Count Label",
         roomTimestampIdentifier: "_NS:69",
         roomPreviewIdentifier: "_NS:91",
+        messageScrollAreaIdentifier: "_NS:29",
         messageTableIdentifier: "_NS:33",
         composeFieldIdentifier: "_NS:51",
         composeFieldDescription: "메시지 입력",

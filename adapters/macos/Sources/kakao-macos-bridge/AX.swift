@@ -78,6 +78,19 @@ enum AX {
     static func perform(_ element: AXUIElement, _ action: String) -> Bool {
         AXUIElementPerformAction(element, action as CFString) == .success
     }
+
+    /// Screen-coordinate frame of an element, or nil.
+    static func frame(_ element: AXUIElement) -> CGRect? {
+        guard let posVal = copyAttribute(element, kAXPositionAttribute as String),
+              let sizeVal = copyAttribute(element, kAXSizeAttribute as String)
+        else { return nil }
+        var pos = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(posVal as! AXValue, .cgPoint, &pos),
+              AXValueGetValue(sizeVal as! AXValue, .cgSize, &size)
+        else { return nil }
+        return CGRect(origin: pos, size: size)
+    }
 }
 
 /// Live `UINode` backed by an `AXUIElement`. Each property is a separate AX

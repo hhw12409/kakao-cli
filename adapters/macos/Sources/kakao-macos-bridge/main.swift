@@ -25,6 +25,18 @@ if args.first == "--self-test" {
     SelfTest.run()
 }
 
+// Debug: list current KakaoTalk window titles.
+if args.first == "--windows" {
+    Debug.windows()
+    exit(0)
+}
+
+// Debug: show the AXActions available on a chat-list row. `--actions row:3`
+if args.first == "--actions" {
+    Debug.actions(roomId: args.count > 1 ? args[1] : "row:0")
+    exit(0)
+}
+
 guard let method = args.first else {
     Envelope.crash("missing method argument")
 }
