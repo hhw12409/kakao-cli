@@ -41,6 +41,10 @@ macOS PoC → `send` 완성 → Windows 어댑터 → inbox/검색.
 
 ### 라이브 검증 (KakaoTalk 26.6.1, 2026-08-29)
 
+- **`send` 30회 연속 정확 전송 통과** (design 완료 기준). 30/30 sent, 대상 방
+  순서·내용 정확, 타 방 유출 없음.
+- `outgoing` 판정: 말풍선 X 좌표로 좌/우 정렬 구분 (받은 것 = 창 왼쪽+~60,
+  보낸 것 = 창 왼쪽+120 이상). 내 메시지는 `sender: ""`, `open` 출력에서 `나` 로 표시.
 - `doctor` / `inbox` / `rooms` / `open` / `search` / **`send`** 모두 실제 카카오톡에서 동작 확인.
 - `send`: 방 열기(창 raise + 더블클릭 — 목록 행에 AX 액션 없음) → 입력창 `AXValue`
   설정 → 전송 버튼 위치 클릭 합성(버튼 `AXPress` 무반응) → 메시지 영역 맨 아래로
@@ -53,6 +57,5 @@ macOS PoC → `send` 완성 → Windows 어댑터 → inbox/검색.
   0.1초). `openRoom`/`sendText` 는 방 열기 시 메인 창을 잠시 활성화한다.
 - 카카오톡 메시지 목록은 가상화(virtualized) — 화면 밖 메시지는 AX 트리에 없음.
   `readRecent`/검증은 스크롤 후 읽지만, 매우 긴 대화는 여전히 최근 N개만.
-- `outgoing`/내 메시지 `sender` 판정 미완 (내 메시지엔 발신자 라벨이 없음).
 - `roomId` 는 세션 한정 `"row:N"`.
 - Windows 어댑터 미구현. 빌드에 ad-hoc `codesign` 단계 미포함.

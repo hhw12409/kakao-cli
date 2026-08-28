@@ -132,6 +132,10 @@ struct AXElement: UINode {
                 AXElement(raw: $0).snapshot(maxDepth: maxDepth - 1, childLimit: childLimit)
             }
         }
+        // Capture the left edge only for text areas — the outgoing/incoming
+        // signal is horizontal alignment of the message bubble.
+        let minX: Double? = (str(0) == "AXTextArea") ? AX.frame(raw).map { Double($0.minX) } : nil
+
         return FixtureNode(
             role: str(0) ?? "",
             subrole: str(1),
@@ -139,6 +143,7 @@ struct AXElement: UINode {
             value: str(3),
             descriptionText: str(4),
             identifier: str(5),
+            frameMinX: minX,
             children: kids
         )
     }

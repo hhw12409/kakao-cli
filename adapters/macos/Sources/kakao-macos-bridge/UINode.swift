@@ -11,6 +11,13 @@ protocol UINode {
     var descriptionText: String? { get }
     var identifier: String? { get }
     var children: [UINode] { get }
+    /// Screen-space left edge, when captured. Only message-body text areas
+    /// carry this (to tell outgoing right-aligned bubbles from incoming).
+    var frameMinX: Double? { get }
+}
+
+extension UINode {
+    var frameMinX: Double? { nil }
 }
 
 extension UINode {
@@ -54,6 +61,7 @@ struct FixtureNode: UINode, Codable {
     let value: String?
     let descriptionText: String?
     let identifier: String?
+    let frameMinX: Double?
     let fixtureChildren: [FixtureNode]?
 
     var children: [UINode] { fixtureChildren ?? [] }
@@ -61,7 +69,7 @@ struct FixtureNode: UINode, Codable {
     enum CodingKeys: String, CodingKey {
         case role, subrole, title, value
         case descriptionText = "description"
-        case identifier
+        case identifier, frameMinX
         case fixtureChildren = "children"
     }
 
@@ -72,6 +80,7 @@ struct FixtureNode: UINode, Codable {
         value: String? = nil,
         descriptionText: String? = nil,
         identifier: String? = nil,
+        frameMinX: Double? = nil,
         children: [FixtureNode] = []
     ) {
         self.role = role
@@ -80,6 +89,7 @@ struct FixtureNode: UINode, Codable {
         self.value = value
         self.descriptionText = descriptionText
         self.identifier = identifier
+        self.frameMinX = frameMinX
         self.fixtureChildren = children
     }
 
@@ -91,6 +101,7 @@ struct FixtureNode: UINode, Codable {
         value = try c.decodeIfPresent(String.self, forKey: .value)
         descriptionText = try c.decodeIfPresent(String.self, forKey: .descriptionText)
         identifier = try c.decodeIfPresent(String.self, forKey: .identifier)
+        frameMinX = try c.decodeIfPresent(Double.self, forKey: .frameMinX)
         fixtureChildren = try c.decodeIfPresent([FixtureNode].self, forKey: .fixtureChildren)
     }
 }

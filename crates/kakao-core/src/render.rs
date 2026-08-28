@@ -212,7 +212,13 @@ pub fn render_messages(messages: &[Message]) -> String {
             MessageKind::Text => m.text.clone(),
             MessageKind::Unsupported => "(지원하지 않는 메시지)".into(),
         };
-        out.push_str(&format!("[{hm}] {}  {body}\n", m.sender));
+        // Outgoing messages carry no sender label from the adapter; show "나".
+        let who = if m.outgoing && m.sender.is_empty() {
+            "나"
+        } else {
+            m.sender.as_str()
+        };
+        out.push_str(&format!("[{hm}] {who}  {body}\n"));
     }
     out.trim_end().to_string()
 }

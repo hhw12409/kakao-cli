@@ -242,7 +242,8 @@ enum Bridge {
         guard let table = conversationTable(ctx, container: container) else {
             throw BridgeError(.uiElementNotFound, "message table \(ctx.selectors.messageTableIdentifier)")
         }
-        return ReadRecentData(messages: readMessages(ctx, table: table, want: max(limit, 1)))
+        let winX = AX.frame(container.raw).map { Double($0.minX) }
+        return ReadRecentData(messages: readMessages(ctx, table: table, want: max(limit, 1), windowMinX: winX))
     }
 
     /// Ensure the conversation for `title` is open and return its container
@@ -266,7 +267,7 @@ enum Bridge {
     }
 
     /// Snapshot the tail of the message table in batched reads and parse it.
-    static func readMessages(_ ctx: Context, table: AXElement, want: Int) -> [Message] {
+    static func readMessages(_ ctx: Context, table: AXElement, want: Int, windowMinX: Double? = nil) -> [Message] {
         let rowEls = AX.elements(table.raw, kAXChildrenAttribute as String)
         // Messages are oldest->newest; take the tail plus slack for spacer rows
         // and the trailing AXColumn.
@@ -281,7 +282,12 @@ enum Bridge {
             )]
         )
         let myName = AX.string(ctx.appRaw, kAXTitleAttribute as String)
-        let all = Parsers.messages(in: synthetic, selectors: ctx.selectors, myName: myName)
+        let all = Parsers.messages(
+            in: synthetic,
+            selectors: ctx.selectors,
+            myName: myName,
+            windowMinX: windowMinX
+        )
         return all.count > want ? Array(all.suffix(want)) : all
     }
 

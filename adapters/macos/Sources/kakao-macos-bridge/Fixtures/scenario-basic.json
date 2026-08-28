@@ -22,17 +22,46 @@
                     {
                       "role": "AXCell",
                       "children": [
-                        { "role": "AXButton", "description": "프로필", "children": [] },
-                        { "role": "AXStaticText", "identifier": "_NS:40", "value": "개발팀", "children": [] },
-                        { "role": "AXStaticText", "identifier": "Count Label", "value": "18", "children": [] },
-                        { "role": "AXStaticText", "identifier": "_NS:69", "value": "오전 11:17", "children": [] },
                         {
-                          "role": "AXScrollArea", "identifier": "_NS:87",
+                          "role": "AXButton",
+                          "description": "프로필",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "identifier": "_NS:40",
+                          "value": "개발팀",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "identifier": "Count Label",
+                          "value": "18",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "identifier": "_NS:69",
+                          "value": "오전 11:17",
+                          "children": []
+                        },
+                        {
+                          "role": "AXScrollArea",
+                          "identifier": "_NS:87",
                           "children": [
-                            { "role": "AXTextArea", "identifier": "_NS:91", "value": "배포 끝났어요?", "children": [] }
+                            {
+                              "role": "AXTextArea",
+                              "identifier": "_NS:91",
+                              "value": "배포 끝났어요?",
+                              "children": []
+                            }
                           ]
                         },
-                        { "role": "AXStaticText", "value": "2", "children": [] }
+                        {
+                          "role": "AXStaticText",
+                          "value": "2",
+                          "children": []
+                        }
                       ]
                     }
                   ]
@@ -44,13 +73,33 @@
                     {
                       "role": "AXCell",
                       "children": [
-                        { "role": "AXButton", "description": "프로필", "children": [] },
-                        { "role": "AXStaticText", "identifier": "_NS:40", "value": "엄마", "children": [] },
-                        { "role": "AXStaticText", "identifier": "_NS:69", "value": "어제", "children": [] },
                         {
-                          "role": "AXScrollArea", "identifier": "_NS:87",
+                          "role": "AXButton",
+                          "description": "프로필",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "identifier": "_NS:40",
+                          "value": "엄마",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "identifier": "_NS:69",
+                          "value": "어제",
+                          "children": []
+                        },
+                        {
+                          "role": "AXScrollArea",
+                          "identifier": "_NS:87",
                           "children": [
-                            { "role": "AXTextArea", "identifier": "_NS:91", "value": "저녁 먹었니", "children": [] }
+                            {
+                              "role": "AXTextArea",
+                              "identifier": "_NS:91",
+                              "value": "저녁 먹었니",
+                              "children": []
+                            }
                           ]
                         }
                       ]
@@ -64,14 +113,39 @@
                     {
                       "role": "AXCell",
                       "children": [
-                        { "role": "AXButton", "description": "프로필", "children": [] },
-                        { "role": "AXStaticText", "identifier": "_NS:40", "value": "개발 공지", "children": [] },
-                        { "role": "AXStaticText", "identifier": "Count Label", "value": "42", "children": [] },
-                        { "role": "AXStaticText", "identifier": "_NS:69", "value": "어제", "children": [] },
                         {
-                          "role": "AXScrollArea", "identifier": "_NS:87",
+                          "role": "AXButton",
+                          "description": "프로필",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "identifier": "_NS:40",
+                          "value": "개발 공지",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "identifier": "Count Label",
+                          "value": "42",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "identifier": "_NS:69",
+                          "value": "어제",
+                          "children": []
+                        },
+                        {
+                          "role": "AXScrollArea",
+                          "identifier": "_NS:87",
                           "children": [
-                            { "role": "AXTextArea", "identifier": "_NS:91", "value": "", "children": [] }
+                            {
+                              "role": "AXTextArea",
+                              "identifier": "_NS:91",
+                              "value": "",
+                              "children": []
+                            }
                           ]
                         }
                       ]
@@ -81,7 +155,12 @@
                 {
                   "role": "AXRow",
                   "subrole": "AXTableRow",
-                  "children": [ { "role": "AXCell", "children": [] } ]
+                  "children": [
+                    {
+                      "role": "AXCell",
+                      "children": []
+                    }
+                  ]
                 }
               ]
             }
@@ -101,7 +180,16 @@
               "role": "AXTable",
               "identifier": "_NS:33",
               "children": [
-                { "role": "AXRow", "subrole": "AXTableRow", "children": [ { "role": "AXCell", "children": [] } ] },
+                {
+                  "role": "AXRow",
+                  "subrole": "AXTableRow",
+                  "children": [
+                    {
+                      "role": "AXCell",
+                      "children": []
+                    }
+                  ]
+                },
                 {
                   "role": "AXRow",
                   "subrole": "AXTableRow",
@@ -109,11 +197,31 @@
                     {
                       "role": "AXCell",
                       "children": [
-                        { "role": "AXButton", "description": "프로필", "children": [] },
-                        { "role": "AXStaticText", "value": "오전 10:00", "children": [] },
-                        { "role": "AXStaticText", "value": "민수", "children": [] },
-                        { "role": "AXImage", "children": [] },
-                        { "role": "AXTextArea", "value": "배포 끝났어요?", "children": [] }
+                        {
+                          "role": "AXButton",
+                          "description": "프로필",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "value": "오전 10:00",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "value": "민수",
+                          "children": []
+                        },
+                        {
+                          "role": "AXImage",
+                          "children": []
+                        },
+                        {
+                          "role": "AXTextArea",
+                          "value": "배포 끝났어요?",
+                          "children": [],
+                          "frameMinX": 1060
+                        }
                       ]
                     }
                   ]
@@ -125,8 +233,16 @@
                     {
                       "role": "AXCell",
                       "children": [
-                        { "role": "AXImage", "children": [] },
-                        { "role": "AXTextArea", "value": "확인은요?", "children": [] }
+                        {
+                          "role": "AXImage",
+                          "children": []
+                        },
+                        {
+                          "role": "AXTextArea",
+                          "value": "확인은요?",
+                          "children": [],
+                          "frameMinX": 1060
+                        }
                       ]
                     }
                   ]
@@ -138,11 +254,16 @@
                     {
                       "role": "AXCell",
                       "children": [
-                        { "role": "AXButton", "description": "프로필", "children": [] },
-                        { "role": "AXStaticText", "value": "1\n오전 11:30", "children": [] },
-                        { "role": "AXStaticText", "value": "수빈", "children": [] },
-                        { "role": "AXImage", "children": [] },
-                        { "role": "AXTextArea", "value": "네 확인했습니다", "children": [] }
+                        {
+                          "role": "AXImage",
+                          "children": []
+                        },
+                        {
+                          "role": "AXTextArea",
+                          "value": "넵 확인했습니다",
+                          "children": [],
+                          "frameMinX": 1220
+                        }
                       ]
                     }
                   ]
@@ -154,9 +275,56 @@
                     {
                       "role": "AXCell",
                       "children": [
-                        { "role": "AXButton", "description": "공유", "children": [] },
-                        { "role": "AXStaticText", "value": "photo.jpg", "children": [] },
-                        { "role": "AXImage", "children": [] }
+                        {
+                          "role": "AXButton",
+                          "description": "프로필",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "value": "1\n오전 11:30",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "value": "수빈",
+                          "children": []
+                        },
+                        {
+                          "role": "AXImage",
+                          "children": []
+                        },
+                        {
+                          "role": "AXTextArea",
+                          "value": "저도 봤어요",
+                          "children": [],
+                          "frameMinX": 1060
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "role": "AXRow",
+                  "subrole": "AXTableRow",
+                  "children": [
+                    {
+                      "role": "AXCell",
+                      "children": [
+                        {
+                          "role": "AXButton",
+                          "description": "공유",
+                          "children": []
+                        },
+                        {
+                          "role": "AXStaticText",
+                          "value": "photo.jpg",
+                          "children": []
+                        },
+                        {
+                          "role": "AXImage",
+                          "children": []
+                        }
                       ]
                     }
                   ]
@@ -169,10 +337,20 @@
           "role": "AXScrollArea",
           "identifier": "_NS:47",
           "children": [
-            { "role": "AXTextArea", "identifier": "_NS:51", "description": "메시지 입력", "children": [] }
+            {
+              "role": "AXTextArea",
+              "identifier": "_NS:51",
+              "description": "메시지 입력",
+              "children": []
+            }
           ]
         },
-        { "role": "AXButton", "title": "전송", "description": "전송", "children": [] }
+        {
+          "role": "AXButton",
+          "title": "전송",
+          "description": "전송",
+          "children": []
+        }
       ]
     }
   ]

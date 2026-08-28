@@ -92,6 +92,7 @@ enum Parsers {
         in conversationWindow: UINode,
         selectors: SelectorMap,
         myName: String?,
+        windowMinX: Double? = nil,
         now: Date = Date()
     ) -> [Message] {
         guard let table = conversationWindow.firstDescendant(where: {
@@ -124,14 +125,22 @@ enum Parsers {
                 currentSender = name
             }
 
-            let body = cell.children.first(where: { $0.role == "AXTextArea" })?.anyText
+            let bodyNode = cell.children.first(where: { $0.role == "AXTextArea" })
+            let body = bodyNode?.anyText
 
             if let body, !body.isEmpty {
-                out.append(Message(
+                let outgoing = isOutgoing(
+                    bubbleMinX: bodyNode?.frameMinX,
+                    windowMinX: windowMinX,
+                    hasProfile: hasProfile,
                     sender: currentSender,
+                    myName: myName
+                )
+                out.append(Message(
+                    sender: outgoing ? "" : currentSender,   // my messages carry no sender label
                     text: body,
                     at: currentAt,
-                    outgoing: myName.map { !currentSender.isEmpty && currentSender == $0 } ?? false,
+                    outgoing: outgoing,
                     kind: .text
                 ))
             } else if isMediaCell(cell) {
@@ -154,10 +163,24 @@ enum Parsers {
         return hasShare || hasImage
     }
 
-    // KNOWN GAP: `outgoing` is `sender == myName`, but a user's own messages in
-    // KakaoTalk carry no sender label, so this never fires for them. Needs a
-    // dump containing the user's own messages to find the real signal (cell
-    // subrole, AXPosition x, or a style attr).
+    /// Outgoing = the message bubble is right-aligned. Incoming bubbles sit at
+    /// `windowMinX + ~60`; outgoing bubbles are pushed right and their left
+    /// edge is well past window-left + a threshold (verified: incoming taX ≈
+    /// win+60, outgoing taX ≥ win+150). Falls back to `sender == myName` when
+    /// geometry is unavailable, then to "has a profile button ⇒ incoming".
+    static func isOutgoing(
+        bubbleMinX: Double?,
+        windowMinX: Double?,
+        hasProfile: Bool,
+        sender: String,
+        myName: String?
+    ) -> Bool {
+        if let bx = bubbleMinX, let wx = windowMinX {
+            return (bx - wx) > 120
+        }
+        if let myName, !sender.isEmpty { return sender == myName }
+        return false   // conservative: unknown -> treat as incoming
+    }
 
     // MARK: helpers
 

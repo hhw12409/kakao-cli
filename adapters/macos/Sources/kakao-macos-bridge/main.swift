@@ -37,6 +37,12 @@ if args.first == "--actions" {
     exit(0)
 }
 
+// Debug: per-message profile/position, to find the outgoing signal.
+if args.first == "--probe-messages" {
+    Debug.probeMessages(roomId: args.count > 1 ? args[1] : "row:0")
+    exit(0)
+}
+
 guard let method = args.first else {
     Envelope.crash("missing method argument")
 }
