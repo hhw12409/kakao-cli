@@ -1,0 +1,26 @@
+# 하네스 중간 산출물 (사후 검증·감사 추적용 로컬 보존, 커밋 제외)
+_workspace/
+_workspace_*/
+
+# 프로젝트 문서 — 커밋 내역에서 제외 (로컬에서만 유지)
+docs/
+
+# Rust
+/target/
+**/target/
+# Cargo.lock IS committed — kakao-cli ships binaries and the formula builds --locked.
+
+# Swift / Xcode (macOS 브리지)
+adapters/macos/.build/
+adapters/macos/*.xcodeproj/xcuserdata/
+DerivedData/
+.swiftpm/
+
+# 로컬 데이터 / 캐시
+*.sqlite
+*.sqlite-*
+*.db
+
+# OS
+.DS_Store
+Thumbs.db

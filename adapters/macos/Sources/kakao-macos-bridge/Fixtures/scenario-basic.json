@@ -1,0 +1,67 @@
+{
+  "role": "AXApplication",
+  "title": "KakaoTalk",
+  "children": [
+    {
+      "role": "AXWindow",
+      "title": "카카오톡",
+      "children": [
+        {
+          "role": "AXList",
+          "description": "채팅",
+          "children": [
+            {
+              "role": "AXRow",
+              "children": [
+                { "role": "AXStaticText", "value": "개발팀", "children": [] },
+                { "role": "AXStaticText", "value": "2", "children": [] },
+                { "role": "AXStaticText", "value": "배포 끝났어요?", "children": [] }
+              ]
+            },
+            {
+              "role": "AXRow",
+              "children": [
+                { "role": "AXStaticText", "value": "엄마", "children": [] },
+                { "role": "AXStaticText", "value": "저녁 먹었니", "children": [] }
+              ]
+            },
+            {
+              "role": "AXRow",
+              "children": [
+                { "role": "AXStaticText", "value": "개발 공지", "children": [] },
+                { "role": "AXStaticText", "value": "", "children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "AXScrollArea",
+          "description": "메시지",
+          "children": [
+            {
+              "role": "AXGroup",
+              "children": [
+                { "role": "AXStaticText", "value": "민수", "children": [] },
+                { "role": "AXStaticText", "value": "배포 끝났어요?", "children": [] }
+              ]
+            },
+            {
+              "role": "AXGroup",
+              "subrole": "AXOutgoing",
+              "children": [
+                { "role": "AXStaticText", "value": "나", "children": [] },
+                { "role": "AXStaticText", "value": "확인 중입니다", "children": [] }
+              ]
+            },
+            {
+              "role": "AXGroup",
+              "children": [
+                { "role": "AXImage", "description": "사진", "children": [] }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

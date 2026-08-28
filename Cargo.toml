@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kakao-contract",
+    "crates/kakao-core",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+license = "MIT"
+repository = "https://github.com/hhw12409/kakao-cli"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "1"
