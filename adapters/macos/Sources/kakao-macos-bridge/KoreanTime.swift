@@ -20,8 +20,12 @@ enum KoreanTime {
     }()
 
     /// `label` is a KakaoTalk time string. `now` is injectable for tests.
+    ///
+    /// KakaoTalk sometimes prefixes an unread-run count on its own line
+    /// (`"1\n오전 1:01"`), so only the last line is the time.
     static func toISO(_ label: String, now: Date = Date()) -> String {
-        let s = label.trimmingCharacters(in: .whitespaces)
+        let s = (label.split(whereSeparator: \.isNewline).last.map(String.init) ?? label)
+            .trimmingCharacters(in: .whitespaces)
         guard !s.isEmpty else { return "" }
 
         // "오전/오후 H:MM"  ->  today (or yesterday if `dayOffset` given elsewhere)
@@ -40,8 +44,10 @@ enum KoreanTime {
         return ""
     }
 
-    /// Parse "오전 11:17" / "오후 12:12" -> 24h (hour, minute).
-    static func parseHourMinute(_ s: String) -> (Int, Int)? {
+    /// Parse "오전 11:17" / "오후 12:12" (or "1\n오전 1:01") -> 24h (hour, minute).
+    static func parseHourMinute(_ raw: String) -> (Int, Int)? {
+        let s = (raw.split(whereSeparator: \.isNewline).last.map(String.init) ?? raw)
+            .trimmingCharacters(in: .whitespaces)
         let ampm: Int
         var rest = s
         if s.hasPrefix("오전") { ampm = 0; rest = String(s.dropFirst(2)) }

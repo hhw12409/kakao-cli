@@ -109,8 +109,10 @@
                     {
                       "role": "AXCell",
                       "children": [
+                        { "role": "AXButton", "description": "프로필", "children": [] },
                         { "role": "AXStaticText", "value": "오전 10:00", "children": [] },
-                        { "role": "AXButton", "description": "공유", "children": [] },
+                        { "role": "AXStaticText", "value": "민수", "children": [] },
+                        { "role": "AXImage", "children": [] },
                         { "role": "AXTextArea", "value": "배포 끝났어요?", "children": [] }
                       ]
                     }
@@ -123,7 +125,24 @@
                     {
                       "role": "AXCell",
                       "children": [
-                        { "role": "AXTextArea", "value": "확인 중입니다", "children": [] }
+                        { "role": "AXImage", "children": [] },
+                        { "role": "AXTextArea", "value": "확인은요?", "children": [] }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "role": "AXRow",
+                  "subrole": "AXTableRow",
+                  "children": [
+                    {
+                      "role": "AXCell",
+                      "children": [
+                        { "role": "AXButton", "description": "프로필", "children": [] },
+                        { "role": "AXStaticText", "value": "1\n오전 11:30", "children": [] },
+                        { "role": "AXStaticText", "value": "수빈", "children": [] },
+                        { "role": "AXImage", "children": [] },
+                        { "role": "AXTextArea", "value": "네 확인했습니다", "children": [] }
                       ]
                     }
                   ]

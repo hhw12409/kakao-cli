@@ -78,6 +78,16 @@ enum Parsers {
 
     // MARK: readRecent
 
+    /// Message cell layout (KakaoTalk 26.6.1 group chat):
+    ///
+    ///   [AXButton desc="프로필"]     — only on the first msg of a sender run
+    ///   [AXStaticText  time]          — only on the first msg of a time run ("오후 11:07",
+    ///                                   sometimes "1\n오전 1:01")
+    ///   [AXStaticText  sender name]   — only alongside the profile button
+    ///   AXImage
+    ///   AXTextArea  body              — absent -> file/photo/sticker = unsupported
+    ///
+    /// Time and sender both carry forward to following rows that omit them.
     static func messages(
         in conversationWindow: UINode,
         selectors: SelectorMap,
@@ -89,31 +99,44 @@ enum Parsers {
         }) else { return [] }
 
         var out: [Message] = []
-        var lastSeenAt = ""   // KakaoTalk shows the time only on the first msg of a group
+        var currentAt = ""
+        var currentSender = ""
 
         for row in table.children where row.role == "AXRow" {
             guard let cell = row.firstDescendant(where: { $0.role == "AXCell" }) else { continue }
 
-            // Timestamp label, if this row carries one.
-            if let tsNode = cell.children.first(where: {
-                $0.role == "AXStaticText" && KoreanTime.parseHourMinute($0.anyText ?? "") != nil
-            }), let iso = optional(KoreanTime.toISO(tsNode.anyText ?? "", now: now)) {
-                lastSeenAt = iso
+            let statics = cell.children.filter { $0.role == "AXStaticText" }
+            let hasProfile = cell.children.contains {
+                $0.role == "AXButton" && $0.descriptionText == "프로필"
+            }
+
+            // The static text whose last line is a clock is the timestamp.
+            if let tsText = statics.compactMap({ $0.anyText }).first(where: {
+                KoreanTime.parseHourMinute($0) != nil
+            }), let iso = optional(KoreanTime.toISO(tsText, now: now)) {
+                currentAt = iso
+            }
+            // A profile button means a new sender run starts here; its name is
+            // the non-clock static text.
+            if hasProfile, let name = statics.compactMap({ $0.anyText }).first(where: {
+                KoreanTime.parseHourMinute($0) == nil
+            }) {
+                currentSender = name
             }
 
             let body = cell.children.first(where: { $0.role == "AXTextArea" })?.anyText
 
             if let body, !body.isEmpty {
                 out.append(Message(
-                    sender: "",                     // TODO: needs a group-chat dump to locate
+                    sender: currentSender,
                     text: body,
-                    at: lastSeenAt,
-                    outgoing: outgoingHeuristic(cell: cell, sender: "", myName: myName),
+                    at: currentAt,
+                    outgoing: myName.map { !currentSender.isEmpty && currentSender == $0 } ?? false,
                     kind: .text
                 ))
             } else if isMediaCell(cell) {
                 out.append(Message(
-                    sender: "", text: "", at: lastSeenAt, outgoing: false, kind: .unsupported
+                    sender: currentSender, text: "", at: currentAt, outgoing: false, kind: .unsupported
                 ))
             }
             // else: spacer / date divider row -> skip
@@ -131,13 +154,10 @@ enum Parsers {
         return hasShare || hasImage
     }
 
-    /// Placeholder: without a per-message sender or a captured alignment/position
-    /// signal we cannot yet tell outgoing from incoming reliably. Resolve with a
-    /// 1:1 + group dump (check `AXPosition` x, cell subrole, or a style attr).
-    static func outgoingHeuristic(cell: UINode, sender: String, myName: String?) -> Bool {
-        if let myName, !myName.isEmpty, sender == myName { return true }
-        return false
-    }
+    // KNOWN GAP: `outgoing` is `sender == myName`, but a user's own messages in
+    // KakaoTalk carry no sender label, so this never fires for them. Needs a
+    // dump containing the user's own messages to find the real signal (cell
+    // subrole, AXPosition x, or a style attr).
 
     // MARK: helpers
 
