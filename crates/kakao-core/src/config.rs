@@ -1,6 +1,6 @@
 //! Filesystem paths and adapter-binary resolution.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::error::{AppError, AppResult};
 
@@ -44,16 +44,29 @@ pub fn bridge_path() -> AppResult<PathBuf> {
 
     let exe = std::env::current_exe()
         .map_err(|e| AppError::internal(format!("실행 경로 확인 실패: {e}")))?;
-    let exe_dir = exe.parent().unwrap_or_else(|| Path::new("."));
-
+    // `current_exe` may hand back a symlink (e.g. Homebrew's bin/ shim); the
+    // bridge sits next to the REAL binary in the keg, so also try the resolved
+    // path.
     let name = bridge_file_name();
-    let candidates = [
-        exe_dir.join("..").join("libexec").join("kakao-cli").join(&name),
-        exe_dir.join(&name),
-    ];
-    for c in candidates {
-        if c.exists() {
-            return Ok(c);
+    let mut exe_dirs: Vec<PathBuf> = Vec::new();
+    if let Some(d) = exe.parent() {
+        exe_dirs.push(d.to_path_buf());
+    }
+    if let Ok(real) = std::fs::canonicalize(&exe) {
+        if let Some(d) = real.parent() {
+            if !exe_dirs.contains(&d.to_path_buf()) {
+                exe_dirs.push(d.to_path_buf());
+            }
+        }
+    }
+    for dir in &exe_dirs {
+        for c in [
+            dir.join("..").join("libexec").join("kakao-cli").join(&name),
+            dir.join(&name),
+        ] {
+            if c.exists() {
+                return Ok(c);
+            }
         }
     }
     Err(AppError::internal(format!(
