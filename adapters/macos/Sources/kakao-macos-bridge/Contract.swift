@@ -11,6 +11,7 @@ let contractVersion = "1.0.0"
 
 enum ErrorCode: String, Codable {
     case kakaoNotRunning = "KAKAO_NOT_RUNNING"
+    case kakaoWindowNotVisible = "KAKAO_WINDOW_NOT_VISIBLE"
     case accessibilityPermissionDenied = "ACCESSIBILITY_PERMISSION_DENIED"
     case appVersionUnsupported = "APP_VERSION_UNSUPPORTED"
     case roomNotFound = "ROOM_NOT_FOUND"

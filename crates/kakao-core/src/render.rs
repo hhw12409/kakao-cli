@@ -29,6 +29,7 @@ pub fn use_color() -> bool {
 pub fn error_message(code: ErrorCode) -> String {
     match code {
         ErrorCode::KakaoNotRunning => "카카오톡이 실행되고 있지 않습니다.".into(),
+        ErrorCode::KakaoWindowNotVisible => "카카오톡 창을 찾을 수 없습니다. 창이 최소화되어 있을 수 있습니다.".into(),
         ErrorCode::AccessibilityPermissionDenied => {
             "kakao-cli 에 접근성 권한이 없습니다.".into()
         }
@@ -52,6 +53,9 @@ pub fn recovery_hint(code: ErrorCode) -> Option<String> {
     match code {
         ErrorCode::KakaoNotRunning => {
             Some("카카오톡 데스크톱 앱을 실행한 뒤 다시 시도하세요.".into())
+        }
+        ErrorCode::KakaoWindowNotVisible => {
+            Some("Dock 의 카카오톡 아이콘을 클릭해 창을 열고 다시 시도하세요.".into())
         }
         ErrorCode::AccessibilityPermissionDenied => Some(
             "시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 kakao-cli 를 켜세요.\n\

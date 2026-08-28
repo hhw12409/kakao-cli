@@ -1,36 +1,44 @@
 import Foundation
 
-/// Version-specific accessibility selectors. KakaoTalk UI updates are the
-/// project's largest risk, so selectors live in one map keyed by app version
-/// instead of being scattered through the parsers. `healthCheck` reports
-/// `APP_VERSION_UNSUPPORTED` when no entry matches.
+/// Version-specific accessibility selectors for KakaoTalk Mac. UI updates are
+/// the project's largest risk, so every selector lives here keyed by app
+/// version instead of being scattered through the parsers. `healthCheck`
+/// reports `APP_VERSION_UNSUPPORTED` when no entry matches.
 ///
-/// The concrete values below are PLACEHOLDERS pending inspection of a real
-/// KakaoTalk build with Accessibility Inspector / a `--dump-tree` capture.
-/// They encode the *shape* of what each parser needs; the QA + PoC pass fills
-/// in the real role/identifier strings.
+/// Values below are from a real `--dump-tree` of KakaoTalk 26.6.1 (see
+/// `_workspace/ax-dumps/`, gitignored). KakaoTalk reuses the same `_NS:*`
+/// identifiers across every row, so identifiers alone don't identify a row —
+/// they DO reliably tag the field *within* a row/window, which is how the
+/// parsers use them.
 struct SelectorMap {
-    /// AXRole of the chat-list container (the "채팅" tab list).
-    var roomListRole: String
-    /// AXRole of a single row inside the chat list.
-    var roomRowRole: String
-    /// AXRole carrying the unread-count badge text within a row.
-    var unreadBadgeRole: String
-    /// AXRole of the message-area container inside an open room.
-    var messageAreaRole: String
-    /// AXRole of a single message bubble.
-    var messageBubbleRole: String
-    /// AXRole of the compose text field.
-    var composeFieldRole: String
-    /// AXRole/label of the send button (matched on title/description).
-    var sendButtonLabel: String
+    // --- main window (chat list) ---
+    /// `AXIdentifier` of the main window.
+    var mainWindowIdentifier: String
+    /// Title of the main window (fallback when the identifier is absent).
+    var mainWindowTitle: String
+    /// `AXIdentifier` of the AXTable holding chat rows.
+    var roomTableIdentifier: String
+    /// Within a room `AXCell`: identifier of the title static text.
+    var roomTitleIdentifier: String
+    /// Within a room `AXCell`: identifier of the member-count static text
+    /// (present for group chats only).
+    var roomMemberCountIdentifier: String
+    /// Within a room `AXCell`: identifier of the timestamp static text.
+    var roomTimestampIdentifier: String
+    /// Within a room `AXCell`: identifier of the last-message preview text area.
+    var roomPreviewIdentifier: String
 
-    /// Lookup by `CFBundleShortVersionString`. Falls back to the newest known
-    /// entry for a prefix match, else `nil`.
+    // --- conversation window ---
+    /// `AXIdentifier` of the AXTable holding message rows.
+    var messageTableIdentifier: String
+    /// `AXDescription` of the compose text area.
+    var composeFieldDescription: String
+    /// `AXTitle` of the send button.
+    var sendButtonTitle: String
+
     static func forVersion(_ version: String?) -> SelectorMap? {
         guard let version else { return known["*"] }
         if let exact = known[version] { return exact }
-        // Match on major.minor prefix (e.g. "3.8" for "3.8.4.xxxx").
         let parts = version.split(separator: ".")
         if parts.count >= 2 {
             let prefix = "\(parts[0]).\(parts[1])"
@@ -41,17 +49,23 @@ struct SelectorMap {
         return known["*"]
     }
 
-    /// `"*"` is the development default so the parsers and fixture tests have
-    /// something to run against before a real version is characterised.
+    static let v26_6 = SelectorMap(
+        mainWindowIdentifier: "Main Window",
+        mainWindowTitle: "카카오톡",
+        roomTableIdentifier: "_NS:63",
+        roomTitleIdentifier: "_NS:40",
+        roomMemberCountIdentifier: "Count Label",
+        roomTimestampIdentifier: "_NS:69",
+        roomPreviewIdentifier: "_NS:91",
+        messageTableIdentifier: "_NS:33",
+        composeFieldDescription: "메시지 입력",
+        sendButtonTitle: "전송"
+    )
+
+    /// `"*"` = development default, also used as the fallback for unknown
+    /// versions. Currently equals the 26.6 map.
     static let known: [String: SelectorMap] = [
-        "*": SelectorMap(
-            roomListRole: "AXList",
-            roomRowRole: "AXRow",
-            unreadBadgeRole: "AXStaticText",
-            messageAreaRole: "AXScrollArea",
-            messageBubbleRole: "AXGroup",
-            composeFieldRole: "AXTextArea",
-            sendButtonLabel: "전송"
-        ),
+        "*": v26_6,
+        "26.6": v26_6,
     ]
 }

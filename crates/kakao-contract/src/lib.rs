@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// Contract version this crate implements. Bump together with
 /// `docs/adapter-contract.md`.
-pub const CONTRACT_VERSION: &str = "1.0.0";
+pub const CONTRACT_VERSION: &str = "1.1.0";
 
 // ===========================================================================
 // Error codes (closed enum). Adapters MUST NOT return any string outside this.
@@ -22,6 +22,9 @@ pub const CONTRACT_VERSION: &str = "1.0.0";
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
     KakaoNotRunning,
+    /// The app is running but no window is accessible (minimized, hidden, or
+    /// on another Space). Added in contract 1.1.0.
+    KakaoWindowNotVisible,
     AccessibilityPermissionDenied,
     AppVersionUnsupported,
     RoomNotFound,
@@ -38,6 +41,7 @@ impl ErrorCode {
     pub fn exit_code(self) -> i32 {
         match self {
             ErrorCode::KakaoNotRunning => 4,
+            ErrorCode::KakaoWindowNotVisible => 4,
             ErrorCode::AccessibilityPermissionDenied => 3,
             ErrorCode::AppVersionUnsupported => 3,
             ErrorCode::RoomNotFound => 2,
@@ -53,6 +57,7 @@ impl ErrorCode {
     pub fn as_str(self) -> &'static str {
         match self {
             ErrorCode::KakaoNotRunning => "KAKAO_NOT_RUNNING",
+            ErrorCode::KakaoWindowNotVisible => "KAKAO_WINDOW_NOT_VISIBLE",
             ErrorCode::AccessibilityPermissionDenied => "ACCESSIBILITY_PERMISSION_DENIED",
             ErrorCode::AppVersionUnsupported => "APP_VERSION_UNSUPPORTED",
             ErrorCode::RoomNotFound => "ROOM_NOT_FOUND",
