@@ -27,10 +27,12 @@ class KakaoCli < Formula
 
   depends_on "rust" => :build
   depends_on :macos
-  depends_on xcode: :build
+  # Swift ships with the Command Line Tools, which Homebrew already requires —
+  # no full Xcode dependency. (A universal bridge would need Xcode's xcbuild;
+  # without it the build falls back to a native-arch binary, which is fine.)
 
   def install
-    system "cargo", "build", "--release", "--locked", "-p", "kakao-core"
+    system "cargo", "install", *std_cargo_args(path: "crates/kakao-core")
 
     # Universal build needs full Xcode; fall back to native arch otherwise.
     args = %w[build -c release --package-path adapters/macos]
@@ -43,7 +45,7 @@ class KakaoCli < Formula
       bin_dir = Utils.safe_popen_read("swift", *args, "--show-bin-path").strip
     end
 
-    bin.install "target/release/kakao-cli"
+    # `cargo install` already placed kakao-cli in bin/.
     (libexec/"kakao-cli").install "#{bin_dir}/kakao-macos-bridge"
 
     # Free ad-hoc signature with a stable identifier — keeps the macOS
