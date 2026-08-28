@@ -34,8 +34,19 @@ class KakaoCli < Formula
   def install
     system "cargo", "install", *std_cargo_args(path: "crates/kakao-core")
 
+    # SwiftPM's own sandbox + manifest compilation clashes with Homebrew's
+    # build sandbox, and it wants a writable ~/Library. Point every path at the
+    # build tree and disable SwiftPM's sandbox.
+    swift_home = buildpath/"swiftpm"
+    ENV["HOME"] = swift_home
+    args = %W[
+      build -c release --package-path adapters/macos
+      --disable-sandbox
+      --scratch-path #{buildpath}/adapters/macos/.build
+      --cache-path #{swift_home}/cache
+      --config-path #{swift_home}/config
+    ]
     # Universal build needs full Xcode; fall back to native arch otherwise.
-    args = %w[build -c release --package-path adapters/macos]
     universal = %w[--arch arm64 --arch x86_64]
     if quiet_system("swift", *args, *universal)
       system "swift", *args, *universal
