@@ -15,7 +15,7 @@ class KakaoCli < Formula
   desc "카카오톡 텍스트 채팅을 터미널에서 처리하는 CLI"
   homepage "https://github.com/hhw12409/kakao-cli"
   url "https://github.com/hhw12409/kakao-cli/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "SHA256_PLACEHOLDER"
+  sha256 "3f0d8a5c3c5efaf66013dc27a5ee316425df53a23fd74bfe3da32caa368a3961"
   license "MIT"
   head "https://github.com/hhw12409/kakao-cli.git", branch: "main"
 
