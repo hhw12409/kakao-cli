@@ -1,5 +1,5 @@
 {
-  "$comment": "Scoop manifest for kakao-cli. Belongs in github.com/hhw12409/scoop-bucket at bucket/kakao-cli.json. DRAFT — the Windows adapter (adapters/windows) is not implemented yet, so there is no release artifact to point at. Fill in url/hash once a Windows build exists.",
+  "$comment": "Scoop manifest for kakao-cli. Belongs in a bucket repo (github.com/hhw12409/scoop-bucket at bucket/kakao-cli.json). DRAFT: the Windows adapter (adapters/windows) type-checks against the Windows API but has NOT been built or run on real Windows / KakaoTalk yet, and its UIA selectors are placeholders. There is no release zip to point at until then — fill in url/hash after a verified Windows build.",
   "version": "0.1.0",
   "description": "카카오톡 텍스트 채팅을 터미널에서 처리하는 CLI",
   "homepage": "https://github.com/hhw12409/kakao-cli",
@@ -7,10 +7,10 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/hhw12409/kakao-cli/releases/download/v0.1.0/kakao-cli-windows-x64.zip",
-      "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "bin": [["bin\\kakao-cli.exe"]]
     }
   },
-  "bin": [["bin\\kakao-cli.exe"]],
   "checkver": "github",
   "autoupdate": {
     "architecture": {
@@ -20,7 +20,8 @@
     }
   },
   "notes": [
-    "카카오톡 데스크톱 앱이 실행 중이어야 합니다.",
+    "카카오톡 데스크톱 앱이 실행 중이어야 합니다. 창을 최소화하지 마세요.",
+    "카카오톡을 관리자 권한으로 실행했다면 kakao-cli 도 같은 권한이 필요합니다.",
     "진단:  kakao-cli doctor"
   ]
 }

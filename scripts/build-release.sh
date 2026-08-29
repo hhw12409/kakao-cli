@@ -47,8 +47,14 @@ if [ "$OS" = "Darwin" ]; then
   codesign --force --sign - --identifier "$ID_BRIDGE" "$PREFIX/libexec/kakao-cli/kakao-macos-bridge"
   codesign --verify --verbose "$PREFIX/bin/kakao-cli"           >/dev/null
   codesign --verify --verbose "$PREFIX/libexec/kakao-cli/kakao-macos-bridge" >/dev/null
-elif [ "$OS" = "MINGW"* ] || [ "$OS" = "MSYS"* ]; then
-  echo "==> Windows bridge not implemented yet; skipping"
+else
+  # Windows (MSYS/Git-Bash) or cross build. The bridge is a plain Rust exe.
+  echo "==> cargo build --release (Windows bridge)"
+  cargo build --release --locked -p kakao-windows-bridge
+  BRIDGE="target/release/kakao-windows-bridge"
+  [ -f "$BRIDGE.exe" ] && BRIDGE="$BRIDGE.exe"
+  install -m 0755 "$BRIDGE" "$PREFIX/libexec/kakao-cli/$(basename "$BRIDGE")"
+  echo "   (Windows: no code signing — Scoop shim + local build avoids SmartScreen)"
 fi
 
 echo

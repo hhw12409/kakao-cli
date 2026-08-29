@@ -1,0 +1,242 @@
+{
+  "controlType": "Pane",
+  "name": "root",
+  "children": [
+    {
+      "controlType": "Window",
+      "name": "카카오톡",
+      "className": "EVA_Window_Dblclk",
+      "children": [
+        {
+          "controlType": "List",
+          "children": [
+            {
+              "controlType": "ListItem",
+              "children": [
+                {
+                  "controlType": "Button",
+                  "name": "프로필",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "roomTitle",
+                  "value": "개발팀",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "memberCount",
+                  "value": "18",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "roomTimestamp",
+                  "value": "오전 11:17",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "roomPreview",
+                  "value": "배포 끝났어요?",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "value": "2",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "controlType": "ListItem",
+              "children": [
+                {
+                  "controlType": "Button",
+                  "name": "프로필",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "roomTitle",
+                  "value": "엄마",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "roomTimestamp",
+                  "value": "어제",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "roomPreview",
+                  "value": "저녁 먹었니",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "controlType": "ListItem",
+              "children": [
+                {
+                  "controlType": "Button",
+                  "name": "프로필",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "roomTitle",
+                  "value": "개발 공지",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "memberCount",
+                  "value": "42",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "roomTimestamp",
+                  "value": "어제",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "automationId": "roomPreview",
+                  "value": "",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "controlType": "ListItem",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "controlType": "Window",
+      "name": "개발팀",
+      "children": [
+        {
+          "controlType": "List",
+          "children": [
+            {
+              "controlType": "ListItem",
+              "children": []
+            },
+            {
+              "controlType": "ListItem",
+              "children": [
+                {
+                  "controlType": "Button",
+                  "name": "프로필",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "value": "오전 10:00",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "value": "민수",
+                  "children": []
+                },
+                {
+                  "controlType": "Image",
+                  "children": []
+                },
+                {
+                  "controlType": "Edit",
+                  "value": "배포 끝났어요?",
+                  "boundingLeft": 1060,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "controlType": "ListItem",
+              "children": [
+                {
+                  "controlType": "Image",
+                  "children": []
+                },
+                {
+                  "controlType": "Edit",
+                  "value": "확인은요?",
+                  "boundingLeft": 1060,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "controlType": "ListItem",
+              "children": [
+                {
+                  "controlType": "Image",
+                  "children": []
+                },
+                {
+                  "controlType": "Edit",
+                  "value": "넵 확인했습니다",
+                  "boundingLeft": 1220,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "controlType": "ListItem",
+              "children": [
+                {
+                  "controlType": "Button",
+                  "name": "프로필",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "value": "1\n오전 11:30",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "value": "수빈",
+                  "children": []
+                },
+                {
+                  "controlType": "Image",
+                  "children": []
+                },
+                {
+                  "controlType": "Edit",
+                  "value": "저도 봤어요",
+                  "boundingLeft": 1060,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "controlType": "ListItem",
+              "children": [
+                {
+                  "controlType": "Image",
+                  "children": []
+                },
+                {
+                  "controlType": "Text",
+                  "value": "photo.jpg",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

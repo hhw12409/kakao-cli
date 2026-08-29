@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/kakao-contract",
     "crates/kakao-core",
+    "adapters/windows",
 ]
 
 [workspace.package]

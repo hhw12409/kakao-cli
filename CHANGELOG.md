@@ -3,6 +3,30 @@
 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식. 구현 순서:
 macOS PoC → `send` 완성 → Windows 어댑터 → inbox/검색.
 
+## [Unreleased]
+
+### Added
+
+- **Windows 어댑터 골격** (`adapters/windows`, Rust + windows-rs 0.58):
+  - `kakao-contract` 크레이트를 직접 공유 — 타입·에러 코드 재구현 없음 (macOS는
+    Swift라 재구현했지만 Windows는 Rust).
+  - UIA COM 헬퍼(`uia.rs`): `IUIAutomation`, `RawViewWalker`, `ValuePattern`,
+    `InvokePattern`, VARIANT/BSTR 변환, 서브트리 → `FixtureNode` 스냅샷.
+  - 파서(`parsers.rs`) + 한국어 시각(`korean_time.rs`)은 플랫폼 독립 — macOS와
+    **동일 fixture 시나리오로 파리티 테스트** (`cargo test`, 그린).
+  - 5개 계약 함수, `--dump-tree` / `--self-test` 디버그 커맨드.
+  - `cargo check --target x86_64-pc-windows-msvc` 통과 (macOS에서 타입 체크).
+  - `kakao_app.rs`: `CreateToolhelp32Snapshot` 프로세스 탐색 + `GetFileVersionInfo`
+    버전.
+- `scripts/build-release.sh` 에 Windows 브랜치 추가.
+
+### 알려진 제한 (Windows)
+
+- **실제 KakaoTalk Windows에서 빌드·실행·검증 안 됨.** windows-rs API 타입만 확인.
+- UIA 셀렉터(`selectors.rs`)는 전부 플레이스홀더 — 실제 `--dump-tree` 필요.
+- 방 열기가 `Invoke` 로 되는지, 전송 버튼 동작, 메시지 목록 가상화 여부 미확인.
+- Scoop manifest 는 릴리스 zip 대기 (초안).
+
 ## [0.1.0] — 2026-08-29
 
 첫 릴리스. macOS 전용 (Windows 어댑터는 다음 단계).
