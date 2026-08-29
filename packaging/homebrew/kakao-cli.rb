@@ -3,11 +3,9 @@
 # This file belongs in a tap repo: github.com/hhw12409/homebrew-tap
 # at Formula/kakao-cli.rb. Kept here in the main repo as the source of truth.
 #
-# Until a release is tagged, install from git:
-#   brew install --HEAD hhw12409/tap/kakao-cli
-#
-# After tagging v0.1.0, fill in `url` + `sha256` (from `brew fetch`) and drop
-# `--HEAD`.
+# Install:
+#   brew install hhw12409/tap/kakao-cli          # tagged release
+#   brew install --HEAD hhw12409/tap/kakao-cli   # latest main
 #
 # Builds from source on the user's machine (docs/adr/0002-distribution.md):
 # zero cost, no Gatekeeper prompt (local build => no quarantine), no
@@ -16,14 +14,10 @@
 class KakaoCli < Formula
   desc "카카오톡 텍스트 채팅을 터미널에서 처리하는 CLI"
   homepage "https://github.com/hhw12409/kakao-cli"
+  url "https://github.com/hhw12409/kakao-cli/archive/refs/tags/v0.1.0.tar.gz"
+  sha256 "SHA256_PLACEHOLDER"
   license "MIT"
   head "https://github.com/hhw12409/kakao-cli.git", branch: "main"
-
-  # stable do
-  #   url "https://github.com/hhw12409/kakao-cli/archive/refs/tags/v0.1.0.tar.gz"
-  #   sha256 "..."
-  #   version "0.1.0"
-  # end
 
   depends_on "rust" => :build
   depends_on :macos

@@ -3,7 +3,9 @@
 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식. 구현 순서:
 macOS PoC → `send` 완성 → Windows 어댑터 → inbox/검색.
 
-## [Unreleased]
+## [0.1.0] — 2026-08-29
+
+첫 릴리스. macOS 전용 (Windows 어댑터는 다음 단계).
 
 ### Added
 
