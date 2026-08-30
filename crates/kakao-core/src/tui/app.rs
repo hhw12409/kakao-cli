@@ -6,6 +6,16 @@ use kakao_contract::{Message, MessageKind, Room};
 use super::worker::{Job, UiEvent};
 use crate::resolve::candidate_line;
 
+/// Which screen the TUI is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Screen {
+    /// The room list — arrow keys move the highlight, `Enter` opens a room.
+    #[default]
+    Rooms,
+    /// An open conversation — type to send, `Esc` returns to the room list.
+    Chat,
+}
+
 /// One rendered row in the transcript.
 #[derive(Debug, Clone)]
 pub enum Line {
@@ -28,6 +38,19 @@ pub struct Picker {
 
 #[derive(Debug, Default)]
 pub struct App {
+    pub screen: Screen,
+
+    // --- room-list screen ---
+    /// The last room listing the worker delivered.
+    pub rooms: Vec<Room>,
+    /// Highlighted row, indexed into [`App::filtered_rooms`].
+    pub rooms_selected: usize,
+    /// Incremental filter typed on the room-list screen.
+    pub rooms_filter: String,
+    /// A `listRooms` job is in flight and no rooms have arrived yet.
+    pub rooms_loading: bool,
+
+    // --- chat screen ---
     pub lines: Vec<Line>,
     pub input: String,
     /// Rows scrolled up from the bottom. 0 == following the latest message.
@@ -42,15 +65,13 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        let mut app = App {
+        App {
             connected: true,
-            status: "방을 선택하세요 — /switch <방>".into(),
+            screen: Screen::Rooms,
+            rooms_loading: true,
+            status: String::new(),
             ..Default::default()
-        };
-        app.push_system(
-            "kakao-cli 채팅.  /switch <방> 으로 시작,  /help 로 명령 목록,  /quit 로 종료.",
-        );
-        app
+        }
     }
 
     pub fn push_system(&mut self, text: impl Into<String>) {
@@ -85,27 +106,64 @@ impl App {
         self.scrollback = 0;
     }
 
+    // --- room-list helpers -------------------------------------------------
+
+    /// Rooms visible under the current filter, in listing order.
+    pub fn filtered_rooms(&self) -> Vec<&Room> {
+        let needle = self.rooms_filter.trim().to_lowercase();
+        self.rooms
+            .iter()
+            .filter(|r| needle.is_empty() || r.title.to_lowercase().contains(&needle))
+            .collect()
+    }
+
+    /// Move the highlight by `delta`, wrapping at both ends.
+    pub fn move_selection(&mut self, delta: i32) {
+        let n = self.filtered_rooms().len();
+        if n == 0 {
+            self.rooms_selected = 0;
+            return;
+        }
+        let cur = self.rooms_selected.min(n - 1) as i32;
+        self.rooms_selected = (cur + delta).rem_euclid(n as i32) as usize;
+    }
+
+    /// Edit the filter, resetting the highlight to the top of the new list.
+    pub fn edit_filter(&mut self, f: impl FnOnce(&mut String)) {
+        f(&mut self.rooms_filter);
+        self.rooms_selected = 0;
+    }
+
+    /// The job that opens the highlighted room, if any.
+    pub fn enter_selected(&mut self) -> Option<Job> {
+        let room = (*self.filtered_rooms().get(self.rooms_selected)?).clone();
+        Some(Job::SwitchTo(room))
+    }
+
+    /// Leave the current conversation and show the room list again.
+    pub fn open_room_list(&mut self) {
+        self.screen = Screen::Rooms;
+        self.rooms_loading = true;
+        self.picker = None;
+    }
+
+    // --- event fold ------------------------------------------------------
+
     /// Fold one worker event into the state.
     pub fn apply(&mut self, event: UiEvent) {
         match event {
             UiEvent::Rooms(rooms) => {
-                if rooms.is_empty() {
-                    self.push_system("방 목록이 비어 있습니다.");
-                } else {
-                    self.push_system("채팅방:");
-                    for r in &rooms {
-                        let unread = if r.unread_count > 0 {
-                            format!("  ({}건 안 읽음)", r.unread_count)
-                        } else {
-                            String::new()
-                        };
-                        self.push_system(format!("  • {}{unread}", r.title));
-                    }
-                    self.push_system("/switch <이름> 으로 이동");
+                self.rooms = rooms;
+                self.rooms_loading = false;
+                let n = self.filtered_rooms().len();
+                if n > 0 && self.rooms_selected >= n {
+                    self.rooms_selected = n - 1;
                 }
             }
             UiEvent::Switched { room, history } => {
                 self.lines.clear();
+                self.screen = Screen::Chat;
+                self.rooms_filter.clear();
                 self.room_title = Some(room.title.clone());
                 self.active_room_id = Some(room.room_id.clone());
                 self.picker = None;
@@ -179,13 +237,13 @@ impl App {
 
     pub fn help_text() -> &'static str {
         "명령:\n\
-         \x20 /rooms                 방 목록\n\
+         \x20 /rooms                 방 목록으로 (Esc 와 동일)\n\
          \x20 /switch <이름|@별칭>    방 이동 (동명이면 번호 선택)\n\
          \x20 /alias add <이름> <검색어>   별칭 추가\n\
          \x20 /alias list            별칭 목록\n\
          \x20 /alias rm <이름>        별칭 삭제\n\
          \x20 /help                  이 도움말\n\
          \x20 /quit                  종료\n\
-         그 밖의 입력 + Enter = 현재 방으로 전송.  PgUp/PgDn 스크롤,  Ctrl-C 종료."
+         그 밖의 입력 + Enter = 현재 방으로 전송.  Esc = 방 목록,  PgUp/PgDn 스크롤,  Ctrl-C 종료."
     }
 }

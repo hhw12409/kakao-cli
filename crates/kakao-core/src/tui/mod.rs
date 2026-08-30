@@ -9,7 +9,7 @@ mod input;
 mod ui;
 pub mod worker;
 
-pub use app::App;
+pub use app::{App, Screen};
 pub use worker::{Job, UiEvent};
 
 use std::io;
@@ -74,30 +74,44 @@ fn event_loop(
     evt_rx: &mpsc::Receiver<UiEvent>,
 ) -> AppResult<()> {
     let mut app = App::new();
+    // Open on the room list — load it right away.
+    let _ = job_tx.send(Job::ListRooms);
+    // Redraw only when something actually changed, so an idle chat doesn't
+    // stream frames at the terminal (matters over SSH and fills pty buffers).
+    let mut dirty = true;
     loop {
-        terminal.draw(|f| ui::render(f, &app))?;
+        if dirty {
+            terminal.draw(|f| ui::render(f, &app))?;
+            dirty = false;
+        }
 
         while let Ok(ev) = evt_rx.try_recv() {
             app.apply(ev);
+            dirty = true;
         }
 
         if event::poll(Duration::from_millis(80))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
-                match input::handle(&mut app, key) {
-                    Action::None => {}
-                    Action::Quit => {
-                        let _ = job_tx.send(Job::Quit);
-                        return Ok(());
+            match event::read()? {
+                Event::Key(key) => {
+                    if key.kind != KeyEventKind::Press {
+                        continue;
                     }
-                    Action::Job(job) => {
-                        if job_tx.send(job).is_err() {
+                    dirty = true;
+                    match input::handle(&mut app, key) {
+                        Action::None => {}
+                        Action::Quit => {
+                            let _ = job_tx.send(Job::Quit);
                             return Ok(());
+                        }
+                        Action::Job(job) => {
+                            if job_tx.send(job).is_err() {
+                                return Ok(());
+                            }
                         }
                     }
                 }
+                Event::Resize(_, _) => dirty = true,
+                _ => {}
             }
         }
     }

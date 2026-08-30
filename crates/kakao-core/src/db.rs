@@ -81,6 +81,9 @@ DROP TABLE IF EXISTS messages_fts;
 pub fn open() -> AppResult<Connection> {
     let path = crate::config::db_path()?;
     let conn = Connection::open(&path)?;
+    // `doctor` (or a second session) may hold the write lock briefly; wait
+    // rather than failing the write outright.
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
     migrate(&conn)?;
     Ok(conn)
 }

@@ -127,9 +127,7 @@ fn handle(
 
         Job::Send(body) => {
             let Some(room) = active.clone() else {
-                return emit(UiEvent::Notice(
-                    "먼저 /switch <방> 으로 방을 선택하세요.".into(),
-                ));
+                return emit(UiEvent::Notice("먼저 방을 선택하세요.".into()));
             };
             match send::send_in_room(adapter, conn, &room.room_id, &room.title, &body, 2000) {
                 Ok(outcome) => match outcome.status {

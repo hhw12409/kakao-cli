@@ -1,6 +1,6 @@
 //! Headless drive of the TUI worker + app fold against the streaming mock.
 //! No terminal, no KakaoTalk. Mirrors what a real session does:
-//! `/rooms` -> `/switch` -> receive a pushed message -> send one.
+//! open on the room list -> highlight a room -> `Enter` -> receive -> send.
 
 use std::sync::mpsc;
 use std::thread;
@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use kakao_core::adapter::MockStreamAdapter;
 use kakao_core::db;
-use kakao_core::tui::app::{App, Line};
+use kakao_core::tui::app::{App, Line, Screen};
 use kakao_core::tui::worker::{self, Job, UiEvent};
 
 const FIXTURE: &str = include_str!("fixtures/chat.json");
@@ -73,33 +73,44 @@ impl Drop for Harness {
 }
 
 #[test]
-fn rooms_switch_receive_send() {
+fn room_list_navigate_open_receive_send() {
     let mut h = Harness::start();
+    assert_eq!(h.app.screen, Screen::Rooms, "opens on the room list");
 
-    // /rooms
+    // The event loop fires this on startup.
     h.jobs.send(Job::ListRooms).unwrap();
-    h.pump_until("room list", |a| {
-        a.lines.iter().any(|l| matches!(l, Line::System(s) if s.contains("개발팀")))
+    h.pump_until("room list loaded", |a| {
+        !a.rooms_loading && a.rooms.iter().any(|r| r.title == "개발팀")
     });
 
-    // /switch 가족  (unique match)
-    h.jobs
-        .send(Job::Switch { query: "가족".into(), exact: false })
-        .unwrap();
-    h.pump_until("switch to 가족", |a| a.room_title.as_deref() == Some("가족"));
-    assert!(h.transcript().iter().any(|l| l.contains("치킨이요")), "history loaded");
+    // Filter down to the unique "가족" room and open the highlighted row.
+    h.app.edit_filter(|f| f.push_str("가족"));
+    let job = h.app.enter_selected().expect("a room is highlighted");
+    h.jobs.send(job).unwrap();
 
-    // pushed incoming message from the fixture
+    h.pump_until("switched to 가족", |a| {
+        a.screen == Screen::Chat && a.room_title.as_deref() == Some("가족")
+    });
+    assert!(
+        h.transcript().iter().any(|l| l.contains("치킨이요")),
+        "history loaded"
+    );
+
+    // Pushed incoming message from the fixture.
     h.pump_until("incoming 아빠", |a| {
         a.lines.iter().any(|l| matches!(l, Line::Msg { who, body, .. } if who == "아빠" && body == "좋아 치킨"))
     });
 
-    // send a line
+    // Send a line.
     h.jobs.send(Job::Send("나도 치킨".into())).unwrap();
     h.pump_until("send echoed", |a| {
         a.lines.iter().any(|l| matches!(l, Line::Msg { outgoing: true, body, .. } if body == "나도 치킨"))
     });
     assert!(h.app.status.starts_with('✓'), "status shows sent: {}", h.app.status);
+
+    // Esc-equivalent: back to the room list.
+    h.app.open_room_list();
+    assert_eq!(h.app.screen, Screen::Rooms);
 }
 
 #[test]
@@ -112,8 +123,11 @@ fn switch_ambiguous_offers_picker_without_auto_selecting() {
 
     // No room was opened — the choice must stay with the user.
     assert!(h.app.room_title.is_none(), "must not auto-open a room");
+    assert_eq!(h.app.screen, Screen::Rooms, "still on the room list");
 
     let job = h.app.pick(1).expect("pick candidate 1");
     h.jobs.send(job).unwrap();
-    h.pump_until("switched after pick", |a| a.room_title.is_some());
+    h.pump_until("switched after pick", |a| {
+        a.screen == Screen::Chat && a.room_title.is_some()
+    });
 }
