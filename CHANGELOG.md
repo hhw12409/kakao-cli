@@ -33,6 +33,14 @@ kakao-cli 는 이제 one-shot 서브명령 집합이 아니라 **대화형 터�
 
 **마이그레이션**: 0.1.0 을 스크립트에서 쓰던 경우 대체재가 없다 — kakao-cli 는 대화형 도구다.
 
+### Fixed
+
+- **접근성 권한 온보딩**: `healthCheck` 가 권한 미부여 시 `AXIsProcessTrustedWithOptions(prompt:)`
+  로 시스템 권한 요청 창을 띄운다 → 브리지 바이너리가 손쉬운 사용 목록에 자동 등록되어 사용자는
+  토글만 켜면 된다 (`AX.requestTrust()` 가 정의만 돼 있고 호출되지 않던 것을 연결). `doctor` 와
+  첫 실행 TUI 게이트 둘 다에서 발생. 복구 문구(`render.rs`, `docs/errors.md`, README)에 터미널 앱에
+  직접 권한 주는 대안(brew 업그레이드에도 유지)과 "왜 두 경로가 다 되는지" 설명 추가.
+
 ### Added (이전)
 
 - **Windows 어댑터 골격** (`adapters/windows`, Rust + windows-rs 0.58):

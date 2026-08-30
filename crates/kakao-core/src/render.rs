@@ -53,10 +53,22 @@ pub fn recovery_hint(code: ErrorCode) -> Option<String> {
             Some("Dock 의 카카오톡 아이콘을 클릭해 창을 열고 다시 시도하세요.".into())
         }
         ErrorCode::AccessibilityPermissionDenied => Some(
-            "시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 kakao-cli 를 켜세요.\n\
-             설정 열기:  open \"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility\"\n\
-             그다음:     kakao-cli doctor"
-                .into(),
+            concat!(
+                "kakao-cli 가 카카오톡 창을 읽으려면 접근성(자동화) 권한이 필요합니다.\n",
+                "\n",
+                "권장 — kakao-cli doctor 를 실행하면 시스템 권한 요청 창이 뜹니다:\n",
+                "  1. [시스템 설정 열기] 를 누른다\n",
+                "  2. 손쉬운 사용 목록에서 kakao-cli 항목의 토글을 켠다\n",
+                "  3. 터미널 앱을 완전히 종료했다 다시 열고:  kakao-cli doctor\n",
+                "\n",
+                "창이 안 뜨거나 항목이 없으면 — 터미널 앱에 권한을 준다(가장 확실, 업그레이드에도 유지):\n",
+                "  시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용 → '+' →\n",
+                "  실행 중인 터미널 앱(iTerm / Terminal) 을 추가하고 토글을 켠다 → 터미널 재시작\n",
+                "\n",
+                "설정 바로 열기:\n",
+                "  open \"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility\""
+            )
+            .into(),
         ),
         ErrorCode::AppVersionUnsupported => {
             Some("kakao-cli doctor 로 버전을 확인하고 업데이트를 알려주세요.".into())

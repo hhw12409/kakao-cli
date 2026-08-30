@@ -18,23 +18,28 @@ pub fn run(cli: Cli) -> AppResult<()> {
 fn doctor() -> AppResult<()> {
     let adapter = adapter::for_current_env().map_err(onboarding_from_internal)?;
     let health = adapter.health_check()?;
+    // `render_doctor` already prints each issue with its recovery block, so
+    // exit straight from here rather than returning an Err (which would make
+    // `main` print the same message a second time).
     println!("{}", render::render_doctor(&health));
 
-    if health
+    let blocking = health
         .issues
         .iter()
-        .any(|i| i.code == ErrorCode::KakaoNotRunning)
-    {
-        return Err(AppError::adapter(ErrorCode::KakaoNotRunning));
+        .map(|i| i.code)
+        .find(|c| {
+            matches!(
+                c,
+                ErrorCode::KakaoNotRunning
+                    | ErrorCode::KakaoWindowNotVisible
+                    | ErrorCode::AccessibilityPermissionDenied
+                    | ErrorCode::AppVersionUnsupported
+            )
+        });
+    match blocking {
+        Some(code) => std::process::exit(code.exit_code()),
+        None => Ok(()),
     }
-    if health
-        .issues
-        .iter()
-        .any(|i| i.code == ErrorCode::AccessibilityPermissionDenied)
-    {
-        return Err(AppError::adapter(ErrorCode::AccessibilityPermissionDenied));
-    }
-    Ok(())
 }
 
 fn onboarding_from_internal(e: AppError) -> AppError {

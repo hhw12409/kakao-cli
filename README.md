@@ -13,7 +13,9 @@
 
 1. 카카오톡 데스크톱 앱을 실행하고 로그인한다. **창을 최소화하지 않는다.**
 2. `kakao-cli` 를 설치한다 (아래 [설치](#설치)).
-3. `kakao-cli doctor` 로 권한을 확인하고, 안내대로 접근성(자동화) 권한을 준다.
+3. `kakao-cli doctor` 를 실행 → 뜨는 권한 요청 창에서 **[시스템 설정 열기]** → 손쉬운 사용
+   목록의 `kakao-cli` 토글 ON → **터미널을 껐다 켜고** 다시 `kakao-cli doctor` (전부 `✓`).
+   자세히는 [접근성 권한](#설치-후-접근성자동화-권한--유일한-수동-단계).
 4. `kakao-cli` 를 실행한다 → 채팅 화면이 열린다.
 5. `/switch 가족` 처럼 방을 고르고, 메시지를 입력해 Enter.
 
@@ -89,10 +91,38 @@ scoop bucket add hhw12409 https://github.com/hhw12409/scoop-bucket
 scoop install kakao-cli
 ```
 
-### 설치 후: 접근성 권한 (유일한 수동 단계)
+### 설치 후: 접근성(자동화) 권한 — 유일한 수동 단계
 
-`kakao-cli doctor` 가 안내한다. macOS: 시스템 설정 → 개인정보 보호 및 보안 → 손쉬운
-사용에서 `kakao-cli` 를 켠다.
+kakao-cli 는 카카오톡 **창을 접근성 API로 읽고 조작**한다. 그래서 macOS 손쉬운 사용
+목록에 등록·허용이 필요하다. (Windows 는 보통 별도 부여 불필요 — 카카오톡을 관리자
+권한으로 실행했다면 kakao-cli 도 같은 권한으로.)
+
+**권장 — 시스템이 자동으로 등록해 준다:**
+
+```bash
+kakao-cli doctor
+```
+
+실행하면 *"kakao-cli 가 이 컴퓨터를 제어하려고 합니다"* 시스템 창이 뜬다.
+
+1. **[시스템 설정 열기]** 클릭
+2. **손쉬운 사용** 목록에서 방금 추가된 **`kakao-cli`** 항목의 토글을 **켠다**
+3. **터미널 앱을 완전히 종료**(`⌘Q`)했다 다시 열고 → `kakao-cli doctor` 로 `✓` 확인
+
+**창이 안 뜨거나 항목이 없으면 — 터미널 앱에 권한을 준다** (가장 확실, `brew upgrade`
+후에도 유지):
+
+```bash
+open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+```
+
+- 목록 아래 **`+`** → `⌘⇧G` → 쓰는 터미널 경로 입력 (예: `/Applications/iTerm.app`
+  또는 `/System/Applications/Utilities/Terminal.app`) → 추가하고 **토글 켜기**
+- 터미널 완전 종료 후 재실행 → `kakao-cli doctor`
+
+> **원리:** 접근성 권한은 실제로 API를 호출하는 프로세스(`kakao-cli` 가 띄우는
+> `kakao-macos-bridge`) 또는 그 부모 터미널 앱에 붙는다. 시스템 창은 브리지 바이너리를
+> 자동 등록하고, 터미널에 주면 자식 프로세스가 물려받는다 — 둘 중 하나면 된다.
 
 ### 소스에서
 

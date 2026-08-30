@@ -11,7 +11,8 @@ enum AX {
     }
 
     /// Trigger the one-time system prompt that adds this binary to the
-    /// "손쉬운 사용" list. Used by `doctor` only, never on the read path.
+    /// "손쉬운 사용" list. Called from `healthCheck` when not yet trusted
+    /// (so `doctor` and first-run TUI both surface it); never on the read path.
     @discardableResult
     static func requestTrust() -> Bool {
         let key = "AXTrustedCheckOptionPrompt" as CFString

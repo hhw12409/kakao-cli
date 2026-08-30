@@ -492,9 +492,16 @@ enum Bridge {
         let version = KakaoApp.version(of: running)
         var issues: [Issue] = []
         if !trusted {
+            // Fire the one-time system prompt ("… would like to control this
+            // computer") so this binary lands in the 손쉬운 사용 list on its
+            // own — the user just flips the toggle instead of hunting for the
+            // path with '+'. Non-blocking; macOS shows it at most once.
+            AX.requestTrust()
             issues.append(Issue(
                 code: .accessibilityPermissionDenied,
-                recovery: "시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 kakao-cli 를 허용하세요."
+                recovery: "권한 요청 창이 떴으면 [시스템 설정 열기] → 목록에서 kakao-cli 항목을 켜세요. "
+                    + "창이 없으면: 시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 "
+                    + "'+' 로 터미널 앱(iTerm/Terminal)을 추가하고 켜세요. 그다음 터미널을 껐다 켜고 kakao-cli doctor."
             ))
         }
         if trusted && SelectorMap.forVersion(version) == nil {
