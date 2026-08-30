@@ -1,6 +1,12 @@
 # Windows 어댑터 — UI Automation (UIA)
 
-카카오톡 Windows 앱을 Windows UI Automation으로 조작하는 브리지. 언어는 **Rust(windows-rs)** 로 확정 — 공통부와 툴체인·타입 공유, 런타임 없는 단일 exe. `docs/adapter-contract.md`의 5개 함수를 구현하고 **macOS 어댑터와 바이트 단위로 같은 출력·에러 코드**를 낸다.
+카카오톡 Windows 앱을 Windows UI Automation으로 조작하는 브리지. 언어는 **Rust(windows-rs)** 로 확정 —
+공통부와 툴체인·타입(`kakao-contract` 크레이트 직접 의존) 공유, 런타임 없는 단일 exe.
+`docs/adapter-contract.md`(v2.0.0)의 인터페이스 함수를 `serve`(주, `src/serve.rs`) + one-shot 두
+전송로로 구현하고 **macOS 어댑터와 바이트 단위로 같은 응답·에러 코드·이벤트**를 낸다.
+
+**현재 상태**: serve 프레이밍(`parse_request`/`write_line`)은 전 플랫폼 빌드·테스트. 라이브 UIA
+(`bridge::serve_call`/`watch_read`, `#[cfg(windows)]`)는 UIA 셀렉터가 플레이스홀더라 미검증 — 후속.
 
 ## 목차
 
@@ -21,8 +27,8 @@
 - 크레이트: `windows` (features 로 `Win32_UI_Accessibility`, `Win32_System_Com` 등 활성화).
 - 진입점: `CoInitializeEx` → `CUIAutomation` COM 객체 생성 → `IUIAutomation`.
 - 핵심 인터페이스: `IUIAutomationElement`, `IUIAutomationTreeWalker`, `IUIAutomationCondition`, 그리고 패턴별 `IUIAutomation*Pattern` (`InvokePattern`, `ValuePattern`, `TextPattern`, `SelectionItemPattern`, `LegacyIAccessiblePattern`).
-- COM 호출이 장황하므로 **얇은 헬퍼 레이어**를 만든다: `find_first(root, &condition) -> Option<Element>`, `get_name(el) -> String`, `set_value(el, text)`, `invoke(el)` 등. 이 레이어 위에서 5개 함수를 구현.
-- 공통부와 **JSON 타입·에러 enum을 같은 크레이트/모듈로 공유**한다 (serde 직렬화). 서브프로세스든 crate 링크든 반환 shape은 계약과 동일.
+- COM 호출이 장황하므로 **얇은 헬퍼 레이어**를 만든다: `find_first(root, &condition) -> Option<Element>`, `get_name(el) -> String`, `set_value(el, text)`, `invoke(el)` 등. 이 레이어 위에서 인터페이스 함수를 구현.
+- 공통부와 **`kakao-contract` 크레이트를 직접 의존**해 타입·에러 enum·serve 프레이밍 타입(`ServeRequest`/`ServeResponse`/`ServeEvent`)을 공유한다. IPC는 **서브프로세스로 확정** (계약 §6) — 반환 shape은 계약과 동일.
 - 조사 도구: Inspect.exe / Accessibility Insights for Windows 로 카카오톡 UIA 트리를 수동 확인.
 
 ## 2. 권한·접근
@@ -88,8 +94,9 @@ issues: 실패 항목 + 셀렉터 맵에 없는 버전이면 APP_VERSION_UNSUPPO
 
 ## 8. 빌드·배포
 
-- ADR 결정에 따라: (a) 서브프로세스면 별도 실행 파일 (`adapters/windows/kakao-windows-bridge.exe`), (b) crate 링크면 공통부 Windows 빌드에 포함되는 모듈. 어느 쪽이든 계약이 정한 요청/응답 shape을 지킨다.
-- (a) 통신: argv 요청, stdout 한 줄 JSON 응답, stderr 진단 로그 (메시지 본문 금지) — macOS 브리지와 동일 프로토콜.
+- **서브프로세스로 확정** (계약 §6): 별도 실행 파일 `kakao-windows-bridge.exe`, `libexec/kakao-cli/` 에 설치.
+- 통신: `serve` = stdin 줄 단위 요청 / stdout 줄 단위 응답·이벤트, one-shot = argv 요청 / stdout 한 줄 JSON.
+  stderr 는 진단 로그 (메시지 본문 금지) — macOS 브리지와 동일 프로토콜.
 - Rust이므로 런타임 없는 단일 exe. `cargo build --release`, MSVC 툴체인.
 - 배포는 **Scoop bucket** (GitHub 레포의 JSON manifest 하나, 비용 0). Scoop이 받아 shim으로 실행하면 SmartScreen 마찰이 적다. 서명·winget 미사용. 상세는 `docs/packaging.md`.
 

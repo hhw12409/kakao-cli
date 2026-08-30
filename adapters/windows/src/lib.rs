@@ -14,6 +14,7 @@ pub mod node;
 pub mod parsers;
 pub mod selectors;
 pub mod self_test;
+pub mod serve;
 
 #[cfg(windows)]
 pub mod bridge;

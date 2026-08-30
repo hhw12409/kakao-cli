@@ -83,8 +83,15 @@ fn bridge_file_name() -> String {
     }
 }
 
-/// True when `KAKAO_CLI_MOCK` points at a fixtures JSON file; the dispatch
-/// layer then uses the in-process mock adapter instead of a subprocess.
+/// True when `KAKAO_CLI_MOCK` points at a fixtures JSON file; the one-shot
+/// dispatch layer (used by `doctor`) then uses the in-process mock adapter.
 pub fn mock_fixture_path() -> Option<PathBuf> {
     std::env::var("KAKAO_CLI_MOCK").ok().map(PathBuf::from)
+}
+
+/// True when `KAKAO_CLI_STREAM_MOCK` points at a stream-fixture JSON file; the
+/// TUI then runs against the in-process streaming mock instead of spawning
+/// `kakao-<os>-bridge serve`.
+pub fn mock_stream_fixture_path() -> Option<PathBuf> {
+    std::env::var("KAKAO_CLI_STREAM_MOCK").ok().map(PathBuf::from)
 }

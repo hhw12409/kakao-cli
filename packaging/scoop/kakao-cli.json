@@ -1,7 +1,7 @@
 {
   "$comment": "Scoop manifest for kakao-cli. Belongs in a bucket repo (github.com/hhw12409/scoop-bucket at bucket/kakao-cli.json). DRAFT: the Windows adapter (adapters/windows) type-checks against the Windows API but has NOT been built or run on real Windows / KakaoTalk yet, and its UIA selectors are placeholders. There is no release zip to point at until then — fill in url/hash after a verified Windows build.",
   "version": "0.1.0",
-  "description": "카카오톡 텍스트 채팅을 터미널에서 처리하는 CLI",
+  "description": "카카오톡을 터미널에서 쓰는 대화형 채팅 클라이언트",
   "homepage": "https://github.com/hhw12409/kakao-cli",
   "license": "MIT",
   "architecture": {
@@ -20,8 +20,10 @@
     }
   },
   "notes": [
-    "카카오톡 데스크톱 앱이 실행 중이어야 합니다. 창을 최소화하지 마세요.",
+    "'kakao-cli' 를 인자 없이 실행하면 채팅 화면이 열립니다.",
+    "카카오톡 데스크톱 앱이 실행 중이어야 하고, 창을 최소화하지 마세요 — 새 메시지를 접근성 트리 폴링으로 받습니다.",
     "카카오톡을 관리자 권한으로 실행했다면 kakao-cli 도 같은 권한이 필요합니다.",
-    "진단:  kakao-cli doctor"
+    "진단:  kakao-cli doctor",
+    "DRAFT: Windows 어댑터의 serve 모드는 프로토콜 파리티까지만 구현됨. 라이브 UIA 검증 후 릴리스 zip 링크를 채웁니다."
   ]
 }

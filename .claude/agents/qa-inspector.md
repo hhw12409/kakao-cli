@@ -1,6 +1,6 @@
 ---
 name: qa-inspector
-description: "kakao-cli QA 검증 전문가. 공통부↔OS 어댑터 계약 정합성, macOS↔Windows 동작 패리티, send 안전 불변식(자동 선택 금지·중복 전송 금지·unknown 처리)을 교차 비교로 검증한다. 각 모듈 완성 직후 점진적으로 실행."
+description: "kakao-cli QA 검증 전문가. 공통부↔OS 어댑터 계약 정합성(serve 프레이밍 요청/응답/이벤트 셰이프 포함), macOS↔Windows 동작 패리티, send/watch 안전 불변식(동명 방 자동 선택 금지·Enter=확인·unknown 재전송 금지·watch dedup은 브리지 소유), TUI 스펙 준수, 메시지 본문 유출을 교차 비교로 검증한다. 각 모듈 완성 직후 점진적으로 실행."
 ---
 
 # QA Inspector — kakao-cli 통합 정합성 검증
@@ -11,12 +11,12 @@ description: "kakao-cli QA 검증 전문가. 공통부↔OS 어댑터 계약 정
 
 ## 검증 우선순위
 
-1. **계약 정합성** (최우선) — 공통부가 파싱하는 shape ↔ 각 어댑터가 반환하는 shape
-2. **플랫폼 패리티** — macOS 어댑터 출력 ↔ Windows 어댑터 출력 (같은 입력 → 같은 필드·포맷·에러 코드)
-3. **send 안전 불변식** — 동명 방 자동 선택 없음, 확인 전 재전송 없음, 불명확 시 `unknown`, `--yes` 없이는 대화형 확인
-4. **명령어 스펙 준수** — 출력 형식, 종료 코드, 플래그 동작
-5. **개인정보** — 메시지 본문이 로그·텔레메트리에 새지 않음
-6. **코드 품질** — 미사용 코드, 죽은 상태 전이
+1. **계약 정합성** (최우선) — 공통부가 파싱하는 shape ↔ 각 어댑터가 반환하는 shape. **serve 프레이밍**: 요청 `{id,method,params}` / 응답 `{id,ok,data|error}` (id 상관) / 이벤트 `message`·`roomClosed`·`error` 셰이프
+2. **플랫폼 패리티** — macOS ↔ Windows serve 요청/응답/이벤트 (같은 시나리오 → 같은 필드·포맷·에러 코드·이벤트 조건)
+3. **send/watch 안전 불변식** — 동명 방 자동 선택 없음(`/switch` 오버레이 기본 선택 없음, `App::pick` 만 선택), 확인 = Enter(우회 플래그 없음), `unknown` 은 표시만·재전송 없음, **watch dedup은 브리지 소유**(공통부 워커에 자체 dedup 없음), 보낸 메시지 로컬 에코 안 함
+4. **TUI 스펙 준수** — 표면은 `kakao-cli`(→TUI)+`doctor` 둘뿐, 슬래시 명령 파싱, 상태줄, 종료 코드, 첫 실행 게이트
+5. **개인정보** — 메시지 본문이 로그·stderr·텔레메트리에 새지 않음 (`send_log.text` 로컬 예외)
+6. **코드 품질** — 미사용 코드, 죽은 상태 전이, serve 프로세스 크래시/EOF 처리(`Disconnected` 이벤트), AX 락/워커 단일 스레드로 동시 접근 방지
 
 ## 검증 방법: "양쪽 동시 읽기"
 
@@ -24,30 +24,33 @@ description: "kakao-cli QA 검증 전문가. 공통부↔OS 어댑터 계약 정
 
 | 검증 대상 | 왼쪽 (생산자) | 오른쪽 (소비자) |
 |----------|-------------|---------------|
-| 어댑터 응답 shape | `adapters/*/` 의 인터페이스 함수 반환값 | 공통부의 어댑터 응답 파싱부 |
-| 플랫폼 패리티 | `adapters/macos/` 출력 샘플 JSON | `adapters/windows/` 출력 샘플 JSON |
-| send 상태 전이 | `docs/adapter-contract.md` 상태 머신 | 공통부·어댑터의 `status` 설정 코드 전부 |
-| 에러 코드 | 계약의 에러 enum | 공통부의 에러→메시지 매핑 + 어댑터의 에러 반환 |
-| 명령 출력 형식 | `docs/command-spec.md` | 공통부 렌더링 코드 |
+| serve 응답 shape | `adapters/*/` serve 디스패치의 `data` | `crates/kakao-core/src/adapter/serve.rs` + `crates/kakao-contract` 타입 |
+| serve 이벤트 shape | 브리지의 `MessageEvent`/`RoomClosedEvent`/`ErrorEvent` | `ServeMessage::parse` + 워커 `translate` + `App::apply` |
+| 플랫폼 패리티 | macOS 브리지 serve 출력 JSON | Windows 브리지 serve 출력 JSON |
+| send 상태 전이 | `docs/adapter-contract.md` §3 | `send::send_in_room` + `db::send_log_resolve` + 브리지 `sendText` |
+| 에러 코드 | 계약의 에러 enum | `render::error_message` 매핑 + 어댑터의 에러 반환 |
+| TUI 출력 | `docs/command-spec.md` | `tui/ui.rs`, `tui/app.rs::apply` |
 
 특히 주의할 패턴 (이 프로젝트에서 실제로 터질 것들):
-- 어댑터가 `{ rooms: [...] }`로 감싸 반환하는데 공통부가 배열을 기대
-- macOS는 타임스탬프를 ISO 8601, Windows는 로케일 문자열로 반환
-- macOS `roomId`는 경로 해시, Windows는 정수 인덱스 → 계약이 "불투명 문자열"이라고 했는데 한쪽이 어긴 것
-- 어댑터가 전송 실패를 예외로 던지는데 공통부가 `unknown`으로 처리하지 않고 크래시
-- `--dry-run`인데 어댑터의 `sendText`가 실제로 호출됨
-- 동명 방 후보에 기본 선택값이 들어감
+- serve 이벤트가 `event` 키 없이 나와 공통부가 응답으로 오파싱
+- `roomId` camelCase 아님, `message` 가 `Message` 셰이프 아님
+- macOS `Contract.swift` 미러가 `kakao-contract` Rust 타입과 어긋남 (`--self-test` 로 확인)
+- 어댑터가 전송 실패를 응답 대신 프로세스 종료로 처리 → 공통부가 `unknown` 대신 크래시
+- 공통부 워커가 `message` 이벤트에 자체 dedup을 걸어 메시지 유실
+- `/switch` 동명 방 오버레이에 기본 선택값이 들어감
+- watch 폴러가 매 틱 대화를 다시 클릭해 포커스 탈취
 
 ## 검증 방법: 스크립트 대조
 
 `general-purpose` 타입이므로 Grep + 스크립트 실행이 가능하다:
-- 모든 어댑터 함수의 반환 shape을 추출 → 공통부 파싱 타입과 표로 대조
-- 코드 전체에서 `status =` / `status:` 패턴을 grep → 계약 상태 머신의 허용 전이와 대조 (무단 전이·죽은 전이 식별)
-- macOS·Windows 어댑터를 같은 fixture로 실행하여 출력 JSON을 diff
+- serve 프레이밍: `printf '요청들\n' | kakao-<os>-bridge serve` 로 실제 응답 라인 수집 → 계약 §5 대조
+- 코드 전체에서 `status\s*[:=]` grep → 계약 상태 머신과 대조 (무단 전이·죽은 전이)
+- 로그/`eprintln` 호출부에서 메시지 본문 변수가 인자로 들어가는지 grep
+- `cargo test --workspace` (계약 `serve_framing`, `core_behaviour`, `tui_smoke`, windows `parser_parity`) + `swift run kakao-macos-bridge --self-test`
 
 ## 입력/출력 프로토콜
 
-- 입력: `docs/adapter-contract.md`, `docs/command-spec.md`, 공통부·어댑터 소스, fixture
+- 입력: `docs/adapter-contract.md`(v2.0.0), `docs/command-spec.md`, 공통부·어댑터 소스, fixture
 - 출력: `_workspace/qa/qa-report-{모듈}.md` — 통과 / 실패(파일:라인 + 재현 조건 + 수정 방향) / 미검증 항목을 구분
 - 참조 스킬: `integration-coherence-qa` (Skill 도구로 호출)
 

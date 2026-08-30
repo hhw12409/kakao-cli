@@ -12,7 +12,7 @@
 # notarization. A free ad-hoc signature gives a stable TCC identity.
 
 class KakaoCli < Formula
-  desc "카카오톡 텍스트 채팅을 터미널에서 처리하는 CLI"
+  desc "카카오톡을 터미널에서 쓰는 대화형 채팅 클라이언트"
   homepage "https://github.com/hhw12409/kakao-cli"
   url "https://github.com/hhw12409/kakao-cli/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "3f0d8a5c3c5efaf66013dc27a5ee316425df53a23fd74bfe3da32caa368a3961"
@@ -64,13 +64,19 @@ class KakaoCli < Formula
 
   def caveats
     <<~EOS
-      kakao-cli needs macOS Accessibility permission to drive the KakaoTalk app.
+      kakao-cli is an interactive terminal chat client. Run `kakao-cli` with no
+      arguments to open the chat screen.
+
+      It needs macOS Accessibility permission to drive the KakaoTalk app.
       Run this and follow the guidance:
 
         kakao-cli doctor
 
       Then enable kakao-cli in:
         System Settings → Privacy & Security → Accessibility
+
+      Keep the KakaoTalk window open (not minimized) while chatting — kakao-cli
+      polls its accessibility tree for new messages.
     EOS
   end
 

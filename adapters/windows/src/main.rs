@@ -1,17 +1,18 @@
-//! kakao-windows-bridge — subprocess adapter for kakao-cli.
+//! kakao-windows-bridge — OS adapter for kakao-cli.
 //!
-//! Invocation (contract §1):  kakao-windows-bridge <method> <argsJson>
-//!   methods: listRooms | openRoom | readRecent | sendText | healthCheck
-//!
-//! Output: exactly one line of JSON on stdout:
-//!   {"ok":true,"data":<...>}   or   {"ok":false,"error":"<CODE>"}
+//! Two transports:
+//!   * `kakao-windows-bridge serve`           — long-lived, newline-delimited
+//!     JSON (contract §5). Primary; drives the interactive TUI.
+//!   * `kakao-windows-bridge <method> <json>` — one-shot, one line out
+//!     (contract §1). Used by `doctor` (healthCheck) and the self-tests.
 
-use kakao_windows_bridge::{envelope, self_test};
+use kakao_windows_bridge::{envelope, self_test, serve};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     match args.first().map(String::as_str) {
+        Some("serve") => serve::run(),
         Some("--self-test") => self_test::run(),
         Some("--dump-tree") => dump_tree(),
         Some(method) => dispatch(method, args.get(1).map(String::as_str).unwrap_or("{}")),

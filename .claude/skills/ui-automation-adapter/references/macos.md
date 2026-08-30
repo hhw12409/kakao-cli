@@ -1,6 +1,10 @@
 # macOS 어댑터 — Accessibility API
 
-카카오톡 Mac 앱을 macOS Accessibility API로 조작하는 Swift 브리지. `docs/adapter-contract.md`의 5개 함수를 구현한다.
+카카오톡 Mac 앱을 macOS Accessibility API로 조작하는 Swift 브리지. `docs/adapter-contract.md`(v2.0.0)의
+인터페이스 함수를 `serve`(주) + one-shot 두 전송로로 구현한다. serve 는 `Serve.swift` — stdin 요청 루프,
+캐시된 `Bridge.Context`, `watch` 폴러(1.5초, `Bridge.readMessagesForWatch`), AX 접근 `Serve.axLock` 직렬화,
+`LineWriter` 로 stdout 직렬화. one-shot 은 `main.swift` 의 `<method> <argsJson>` 경로 (doctor·`--self-test`).
+두 경로 모두 `Bridge.*` 하부 함수를 호출한다.
 
 ## 목차
 

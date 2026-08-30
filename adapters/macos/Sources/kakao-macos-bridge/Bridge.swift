@@ -246,6 +246,23 @@ enum Bridge {
         return ReadRecentData(messages: readMessages(ctx, table: table, want: max(limit, 1), windowMinX: winX))
     }
 
+    /// Read the message tail for a **watch** poll. Unlike `readRecent` this
+    /// never synthesises a click: if the conversation is not already open in
+    /// KakaoTalk it throws `UI_ELEMENT_NOT_FOUND`, which the poller turns into a
+    /// `roomClosed` event after a couple of misses. Keeps steady-state polling
+    /// free of focus stealing.
+    static func readMessagesForWatch(roomId: String, limit: Int = 12) throws -> [Message] {
+        let ctx = try context()
+        let (_, title) = try resolveRoom(ctx, roomId: roomId)
+        guard let container = conversationContainer(ctx, title: title),
+              let table = conversationTable(ctx, container: container) else {
+            throw BridgeError(.uiElementNotFound, "conversation for \(title) not open")
+        }
+        scrollMessagesToBottom(ctx, container: container)
+        let winX = AX.frame(container.raw).map { Double($0.minX) }
+        return readMessages(ctx, table: table, want: max(limit, 1), windowMinX: winX)
+    }
+
     /// Ensure the conversation for `title` is open and return its container
     /// (a popped-out window, or the main window for the embedded pane). Tries
     /// already-open first, then a synthesised click on the list row.

@@ -1,17 +1,75 @@
 ---
 name: ui-automation-adapter
-description: "kakao-cli의 OS 어댑터를 접근성 API로 구현한다. 카카오톡 데스크톱 앱의 접근성 트리 탐색(역할·이름·값 우선, 좌표 클릭 최소화), 방 목록/최근 텍스트 읽기, 텍스트 입력·전송·전송 검증, 권한 진단, 버전별 셀렉터와 트리 fixture 테스트를 작업할 때 사용. macOS(Accessibility API/Swift) 또는 Windows(UI Automation) 어댑터 구현/수정 시 사용."
+description: "kakao-cli의 OS 어댑터를 접근성 API로 구현한다. serve 모드(장수 프로세스, 줄 단위 JSON-RPC, watch 1.5초 폴러 → message/roomClosed/error 이벤트, AX 접근 단일 락 직렬화) + one-shot 프레이밍. 접근성 트리 탐색(역할·이름·값 우선, 좌표 클릭 최소화), 방 목록/최근 텍스트 읽기, 텍스트 입력·전송·전송 검증, 권한 진단, 버전별 셀렉터와 트리 fixture 테스트를 작업할 때 사용. macOS(Accessibility API/Swift) 또는 Windows(UI Automation/Rust) 어댑터 구현/수정 시 사용."
 ---
 
 # UI 자동화 어댑터 구현
 
-어댑터는 각 OS의 카카오톡 앱을 접근성 API로 읽고 조작하여 `docs/adapter-contract.md`의 5개 함수를 구현한다. 카카오톡 네트워크 프로토콜은 재현하지 않는다.
+어댑터는 각 OS의 카카오톡 앱을 접근성 API로 읽고 조작하여 `docs/adapter-contract.md`(v2.0.0)의
+인터페이스 함수를 구현한다. 카카오톡 네트워크 프로토콜은 재현하지 않는다.
 
-**성공 기준: 두 어댑터(macOS/Windows)가 같은 입력에 같은 출력·에러 코드를 낸다.** 어댑터별 구현 방법은 달라도, 계약이 정한 결과는 바이트 단위로 같아야 한다.
+**성공 기준: 두 어댑터(macOS/Windows)가 같은 요청에 같은 응답·에러 코드·이벤트를 낸다.** 어댑터별
+구현 방법은 달라도, 계약이 정한 결과는 바이트 단위로 같아야 한다.
+
+## 두 전송로 (한 바이너리)
+
+| 서브명령 | 설명 | 용도 |
+|----------|------|------|
+| `serve` | 장수 프로세스. stdin 줄 단위 요청 → stdout 응답(`id` 상관) + 비동기 이벤트 (계약 §5) | 대화형 채팅 TUI (주) |
+| `<method> <argsJson>` | 한 줄 응답 후 종료 (계약 §1) | `doctor`(healthCheck), `--self-test` |
+
+serve 가 주 전송로다. one-shot 은 제거하지 않는다(테스트·doctor). 두 경로가 **같은 하부 함수**를 호출해야 한다 (macOS: `Bridge.*`, Windows: `bridge::*`).
 
 OS별 상세는 필요할 때 로드한다:
 - macOS (Accessibility API, `AXUIElement`, Swift, TCC 권한) → `references/macos.md`
 - Windows (UI Automation, `ControlType`/`AutomationId`, Rust + windows-rs) → `references/windows.md`
+
+## serve 모드
+
+```
+$ kakao-<os>-bridge serve
+  in:   {"id":1,"method":"listRooms","params":{}}
+  out:  {"id":1,"ok":true,"data":{...}}
+  in:   {"id":5,"method":"watch","params":{"roomId":"row:3"}}
+  out:  {"id":5,"ok":true,"data":{}}
+  out:  {"event":"message","roomId":"row:3","message":{...}}   ← watch 폴러가 비동기 방출
+  in:   {"id":0,"method":"shutdown","params":{}}               ← 응답 없이 종료
+```
+
+- **요청 루프**: stdin 을 줄 단위로 읽는다. EOF(공통부 종료) 시 프로세스 종료. `listRooms`/`openRoom`/
+  `readRecent`/`sendText`/`healthCheck` 는 one-shot 과 동일한 하부 함수를 호출해 `id` 상관 응답.
+- **watch**: 요청 시점의 메시지 tail 을 baseline(행 개수 + 마지막 N행 해시)으로 잡고, 백그라운드
+  폴러가 **1.5초마다** 그 방의 메시지 tail 을 읽어 **새로 추가된 행만** `message` 이벤트로 방출한다.
+  `watch` 는 이전 watch 를 대체. `unwatch` 로 중지.
+- **de-dup 은 브리지 소유.** 공통부는 받은 `message` 이벤트를 그대로 append 한다. 브리지가 UI 구조로
+  판별하는 게 정확하다. 폭주·가상화 창 밖 메시지는 일부 유실/중복 가능 — 개인 도구 수준 허용.
+- **roomClosed / error 이벤트**: watch 폴링이 대화를 못 찾으면(사용자가 카카오톡에서 다른 방으로
+  이동 등) N회 연속 실패 후 `roomClosed`. 창 최소화 등 일시적 조건은 `error` (advisory, 계속 재시도).
+- **watch 폴링은 클릭하지 않는다.** 대화가 이미 열려 있으면 읽기만 → 포커스 탈취 없음. 대화를 못
+  찾으면 강제로 열지 말고 `roomClosed`.
+- **AX 접근 직렬화**: 폴러와 요청 핸들러가 동시에 접근성 트리를 만지면 안 된다. 단일 락(macOS
+  `Serve.axLock`) 또는 단일 스레드로 모든 AX 호출을 감싼다.
+- **stdout 쓰기 직렬화**: 폴러와 요청 핸들러가 각각 라인을 쓰므로 writer 를 락으로 보호.
+
+## 공통 원칙 (양 어댑터 동일)
+
+### 역할·이름·값 > 좌표
+
+요소를 지목할 때 접근성 역할(role/ControlType), 이름, 값, 식별자(AXDOMIdentifier/AutomationId)를
+쓴다. 픽셀 좌표 클릭은 최후의 수단이고, 쓸 때 이유를 주석으로 남긴다. 좌표는 해상도·DPI·창 위치·
+테마·카카오톡 UI 업데이트에 모두 취약하다.
+
+### 읽기와 쓰기 분리
+
+`listRooms`/`readRecent`/`healthCheck` 및 **watch 폴링**은 부작용 0. `openRoom`/`sendText` 만 앱 상태를
+변경한다. 읽기 경로에서 클릭·타이핑 금지.
+
+### 포커스 탈취 최소화
+
+- **정상 상태 watch 폴링은 포커스를 뺏지 않는다** (읽기 전용).
+- `openRoom`(대화 행 클릭)과 `sendText`(입력창 붙여넣기 + 전송 클릭)는 카카오톡 창을 잠깐 앞으로
+  올려야 할 수 있다 — 접근성 방식의 본질적 제약. 계약(§2)에 명시된 경우만, 끝나면 원복 시도.
+- watch 시작 시 `openRoom` 을 한 번 하되, 이후 폴링은 이미 열린 대화를 읽기만 한다.
 
 ## 공통 원칙 (양 어댑터 동일)
 

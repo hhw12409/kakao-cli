@@ -394,8 +394,86 @@ pub fn dispatch(method_name: &str, args_json: &str) -> ! {
             to_value(send_text(&ctx, &a.room_id, &a.text))
         }
         Method::HealthCheck => unreachable!(),
+        // serve-only methods never reach the one-shot name match above.
+        Method::Watch | Method::Unwatch | Method::Shutdown => {
+            envelope::crash("serve-only method in one-shot dispatch")
+        }
     };
     envelope::finish(result, method_name);
+}
+
+// --- serve-mode entry points (contract §5) --------------------------------
+
+/// Run one serve-mode request that is not `watch`/`unwatch`/`shutdown`.
+/// Returns the `data` value on success or a contract error code.
+pub fn serve_call(
+    method: &str,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrorCode> {
+    if method == "healthCheck" {
+        return to_value(health_check()).map_err(|e| e.code);
+    }
+
+    let ctx = context().map_err(|e| e.code)?;
+    let str_param = |k: &str| params.get(k).and_then(|v| v.as_str()).map(str::to_string);
+
+    match method {
+        "listRooms" => list_rooms(&ctx).and_then(to_value).map_err(|e| e.code),
+        "openRoom" => {
+            let room_id = str_param("roomId").ok_or(ErrorCode::RoomNotFound)?;
+            open_room(&ctx, &room_id)
+                .map(|_| serde_json::json!({}))
+                .map_err(|e| e.code)
+        }
+        "readRecent" => {
+            let room_id = str_param("roomId").ok_or(ErrorCode::RoomNotFound)?;
+            let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(40) as u32;
+            read_recent(&ctx, &room_id, limit)
+                .and_then(to_value)
+                .map_err(|e| e.code)
+        }
+        "sendText" => {
+            let room_id = str_param("roomId").ok_or(ErrorCode::SendInputFailed)?;
+            let text = str_param("text").ok_or(ErrorCode::SendInputFailed)?;
+            to_value(send_text(&ctx, &room_id, &text)).map_err(|e| e.code)
+        }
+        _ => Err(ErrorCode::UiElementNotFound),
+    }
+}
+
+/// A watch-poll read of the message tail. Never synthesises a click: throws
+/// `UI_ELEMENT_NOT_FOUND` if the conversation is not already open, which the
+/// poller turns into a `roomClosed` event.
+pub fn watch_read(room_id: &str) -> Result<Vec<kakao_contract::Message>, ErrorCode> {
+    let ctx = context().map_err(|e| e.code)?;
+    let (_, title) = resolve_room(&ctx, room_id).map_err(|e| e.code)?;
+    let conv = conversation_window(&ctx, &title).ok_or(ErrorCode::UiElementNotFound)?;
+    let list = conv
+        .find_first(&ctx.uia, 200, &|e| {
+            e.control_type() == ctx.sel.message_list_control_type
+        })
+        .ok_or(ErrorCode::UiElementNotFound)?;
+    let rows: Vec<UiaElement> = list.children(&ctx.uia);
+    let tail: Vec<FixtureNode> = rows
+        .iter()
+        .skip(rows.len().saturating_sub(20))
+        .map(|r| r.snapshot(&ctx.uia, 4))
+        .collect();
+    let synthetic = FixtureNode {
+        control_type: "Window".into(),
+        children: vec![FixtureNode {
+            control_type: ctx.sel.message_list_control_type.into(),
+            children: tail,
+            ..blank()
+        }],
+        ..blank()
+    };
+    let window_left = conv.bounding_left();
+    let mut all = parsers::messages(&synthetic, ctx.sel, window_left, korean_time::now());
+    if all.len() > 12 {
+        all = all.split_off(all.len() - 12);
+    }
+    Ok(all)
 }
 
 fn parse_args<T: for<'de> Deserialize<'de>>(json: &str) -> T {

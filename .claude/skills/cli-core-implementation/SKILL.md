@@ -1,119 +1,137 @@
 ---
 name: cli-core-implementation
-description: "kakao-cli 공통부(OS 독립 계층)를 구현한다. CLI 명령 파싱과 어댑터 디스패치, 출력 렌더링, 방 이름 해석과 동명 방 UX, @별칭, SQLite 캐시와 FTS5 search, send 안전 정책(--stdin/--exact/--yes/--dry-run/--max-chars/편집기 모드)과 pending→sent/failed/unknown 상태 머신을 작업할 때 사용. inbox·rooms·open·send·search·doctor·alias·cache 명령 구현/수정 시에도 사용."
+description: "kakao-cli 공통부(OS 독립 계층)를 구현한다. 대화형 채팅 TUI(ratatui: 트랜스크립트·입력줄·상태줄·방 선택 오버레이), 어댑터 워커 스레드(Job/UiEvent, AX I/O를 UI에서 분리), serve 모드 클라이언트(ServeAdapter)와 StreamAdapter/MockStreamAdapter, 슬래시 명령(/switch·/rooms·/alias) 파서, 방 이름 해석(resolve_in_list, 동명 방 자동 선택 없음)과 @별칭, SQLite 스크롤백 캐시, send 안전 정책(Enter=확인, send_in_room)과 pending→sent/failed/unknown 상태 머신, 첫 실행 온보딩, doctor 명령을 작업할 때 사용."
 ---
 
 # 공통부 구현
 
-kakao-cli 공통부는 OS에 독립적인 모든 것이다. 카카오톡 UI를 직접 건드리지 않는다 — 그건 어댑터가 한다. 공통부는 어댑터가 `docs/adapter-contract.md`대로 데이터를 준다고 보고, 그 위에 사용자 경험을 만든다.
+kakao-cli 공통부는 OS에 독립적인 모든 것이다. 카카오톡 UI를 직접 건드리지 않는다 — 그건 어댑터가
+한다. 공통부는 어댑터가 `docs/adapter-contract.md`(v2.0.0)대로 데이터를 준다고 보고, 그 위에
+**대화형 채팅 경험**을 만든다.
 
-정본: `docs/adapter-contract.md` (계약), `docs/command-spec.md` (명령 스펙), `docs/db-schema.sql` (스키마), `docs/kakao-cli-design.md` (설계 의도).
+정본: `docs/adapter-contract.md`(계약), `docs/command-spec.md`(TUI 스펙), `docs/db-schema.sql`(스키마 v2),
+`docs/kakao-cli-design.md` / `docs/adr/0003-interactive-tui.md`(설계 의도).
 
-## 구현 순서 (design 문서 4단계)
+스택: Rust. TUI = `ratatui` + `crossterm`, DB = `rusqlite`(bundled), CLI 파싱 = `clap`. 런타임 0.
 
-1. macOS PoC를 받쳐줄 최소 공통부: `doctor`, `rooms`, `open`, `send` 골격 + 어댑터 디스패치
-2. `send` 완성도: 동명 방 UX, `--exact`, `--stdin`, 편집기 모드, 별칭, `--dry-run`/`--yes`, 상태 머신
-3. (Windows 어댑터는 어댑터 엔지니어 몫 — 공통부는 어댑터 교체만 지원)
-4. `inbox`, SQLite 캐시 + FTS5 `search`
-
-## 어댑터 디스패치
-
-- 어댑터는 계약이 정한 방식(서브프로세스 + 한 줄 JSON 등)으로만 호출한다.
-- **어댑터 응답을 런타임 검증한다.** 계약이 `{ rooms: [...] }`라고 했으면 그 shape을 확인하고, 어긋나면 조용히 넘기지 말고 명확한 내부 오류(`어댑터 계약 위반: ...`)로 실패시킨다. 제네릭 캐스팅으로 타입 체커만 만족시키고 런타임에 터지는 상황을 막는다.
-- 어댑터의 `error` 코드는 계약 enum이다. 공통부는 코드 → 사용자 메시지(`docs/errors.md`)로 매핑한다.
-- 현재 OS를 감지해 macOS/Windows 어댑터를 선택. 브리지 바이너리는 자기 실행 파일 기준 상대경로(예: `libexec/kakao-macos-bridge`)로 찾는다.
-- **첫 실행 온보딩:** 접근성 권한 미부여, 브리지 미발견, 카카오톡 미실행 등은 스택트레이스가 아니라 `doctor` 수준의 안내(무엇이/왜/복사할 명령·설정 경로)로 출력한다. 처음 쓰는 사람이 이 출력만 보고 다음 행동을 할 수 있어야 한다.
-
-## 출력 렌더링
-
-`docs/command-spec.md`의 형식을 **정확히** 따른다. design 문서의 예시가 정본:
+## CLI 표면 (아주 작다)
 
 ```
-$ kakao-cli inbox
-● 개발팀        2   민수: 배포 끝났어요?
-  엄마              저녁 먹었니
-
-$ kakao-cli send "개발팀" "네, 확인하고 답할게요."
-✓ 개발팀에 전송됨  10:43
+kakao-cli            → crate::tui::run()   (인자 없음)
+kakao-cli doctor     → commands::doctor()  (one-shot healthCheck)
 ```
 
-- 성공은 짧고 확실하게. 실패는 세 부분(무엇이/왜/지금 뭘): 복구 명령을 함께 출력.
-- `●` = 안 읽음. 시각은 로컬 타임존으로 표시하되 내부 저장·계약은 UTC ISO 8601.
-- 색/기호는 TTY가 아닐 때(파이프) 억제하거나 단순화. 스크립트가 파싱하기 쉬운 출력을 해친다면 `--json` 같은 별도 경로를 스펙에 두는지 확인.
+`cli.rs` 의 `Command` 는 `Doctor` 하나, `Cli.command` 는 `Option<Command>`. `None` 이면 TUI.
+그 밖의 서브명령은 없다 (`send`/`rooms`/`open`/`inbox`/`search`/`alias`/`cache` 는 0.2.0에서 제거됨).
 
-## 방 이름 해석
-
-`send`/`open`은 검색어를 받는다. 해석 규칙 (오발송 방지의 핵심):
-
-1. 어댑터 `listRooms()`로 방 목록을 얻고 검색어와 매칭 (부분 일치, 대소문자 무시). `--exact`면 제목 완전 일치로 제한.
-2. **정확히 하나 일치** → 그 방으로 진행.
-3. **여러 개 일치** → 후보 목록을 제목·인원·마지막 메시지 시각과 함께 출력하고 번호 선택을 요구한다. **기본 선택값을 두지 않는다.** 자동 전송 금지.
-4. **비대화형**(`--yes` 또는 파이프)에서 여러 개 일치 → 전송하지 않고 종료 코드 5 + 후보 목록.
-5. **0개 일치** → 종료 코드 2 + "가까운 이름" 힌트(선택).
+## 스레드 모델
 
 ```
-$ kakao-cli send "개발" "배포 끝났습니다"
-여러 채팅방이 일치합니다.
-  1. 개발팀                  18명 · 마지막 메시지 2분 전
-  2. 개발 공지               42명 · 마지막 메시지 1일 전
-  3. 개발자 스터디            6명 · 마지막 메시지 4일 전
-선택 [1-3, q]:
+UI 스레드 (tui/mod.rs)        어댑터 워커 스레드 (tui/worker.rs)
+  터미널 소유, 렌더·입력   ──Job(mpsc)──▶   Box<dyn StreamAdapter> + Connection 소유
+  AX I/O에 절대 블록 안 됨  ◀─UiEvent(mpsc)─   요청 라운드트립 + watch 이벤트 폴링
 ```
 
-해석된 방은 계약의 `roomId`(불투명 문자열)로 어댑터에 넘긴다. `roomId`의 내부 구조를 해석하지 않는다.
+- `Job`: `ListRooms | Switch{query,exact} | SwitchTo(Room) | Send(String) | AliasAdd/List/Remove | Quit`
+- `UiEvent`: `Rooms | Switched{room,history} | Ambiguous(Vec<Room>) | SwitchFailed | Incoming(Message) | Sent | SendFailed | SendUnknown | Notice | Warn | Disconnected`
+- 워커는 `jobs.try_recv()` → 처리 → `adapter.next_event(150ms)` 폴링을 반복. 이 짧은 타임아웃이 루프 페이싱도 겸한다.
+- 워커가 `Connection` 을 소유하므로 UI 스레드는 DB를 만지지 않는다. `rusqlite::Connection` 은 Send.
 
-## @별칭
+## 어댑터 계층
 
-- `alias add dev "개발팀"` → `aliases` 테이블(로컬 전용)에 저장.
-- `send @dev "..."` → 별칭을 제목으로 치환한 뒤 위 이름 해석을 그대로 거친다.
-- 별칭이 가리키는 제목이 **더 이상 없거나 여러 방과 겹치면** 전송 전 재확인 (일반 동명 방 UX로 폴백).
-- 별칭은 절대 서버/텔레메트리로 나가지 않는다.
+- `trait StreamAdapter` (`&mut self`): `list_rooms / open_room / read_recent / send_text / watch / unwatch / health_check / next_event(timeout) / shutdown`.
+- `ServeAdapter` — `kakao-<os>-bridge serve` 를 spawn. 리더 스레드가 stdout 라인을 `ServeMessage` 로 파싱해 채널에 넣고, `request()` 가 `id` 로 응답을 상관시키며 그 사이 이벤트는 버퍼링.
+- `MockStreamAdapter` (`KAKAO_CLI_STREAM_MOCK=<fixture>`) — 카카오톡 없이 TUI·테스트 구동. fixture 에 `rooms`/`history`/`incoming`(스크립트된 수신)/`send_text`(강제 결과).
+- `trait Adapter`(one-shot) + `SubprocessAdapter` + `MockAdapter` 는 **`doctor` 전용으로 유지**.
+- **어댑터 응답을 런타임 검증한다** (`serde_json::from_value` 실패 → `어댑터 계약 위반: …` 내부 오류).
+- serve 요청/응답 셰이프는 `crates/kakao-contract` 의 `ServeRequest`/`ServeResponse`/`ServeEvent`.
 
-## send 안전 정책
+## 채팅 TUI (`tui/`)
 
-`send`가 제품의 중심이다. 빠르되 오발송 가능성을 낮춘다.
+| 파일 | 책임 |
+|------|------|
+| `mod.rs` | crossterm raw mode + alt screen, 워커 spawn, 이벤트 루프, 첫 실행 온보딩 게이트, 정리 |
+| `app.rs` | `App` 상태 + `apply(UiEvent)` 폴드. **렌더·I/O 없음** — `tests/tui_smoke.rs` 가 헤드리스 구동 |
+| `ui.rs` | ratatui 렌더: 제목바 / 트랜스크립트(스크롤) / 상태줄 / 입력 박스 / 방 선택 오버레이 |
+| `input.rs` | 키 → `Action` (`None`/`Quit`/`Job`), 슬래시 명령 파서 |
+| `worker.rs` | `Job` 처리 + watch 이벤트 → `UiEvent`. `do_switch` = unwatch → open → readRecent → insert → watch |
 
-- **기본**: `send <방> <메시지>` 두 인자. 정확히 하나 일치면 즉시 전송, 성공 시 `✓ ...`.
-- **`--stdin`**: 표준 입력에서 본문을 읽는다. **줄바꿈 보존.** 빈 입력(공백만)은 보내지 않는다. `--max-chars` 초과 시 전송하지 않고 길이 초과를 알린다 (기본 상한을 스펙에서 확인).
-- **편집기 모드**: 메시지 인자를 생략하면 `$VISUAL`→`$EDITOR` 순으로 편집기를 연다. 저장·종료 후 받는 방·본문 미리보기 + `전송할까요? [y/N]`.
-- **`--dry-run`**: 대상·메시지만 출력. `sendText`를 **호출하지 않는다.** 상태 머신의 `pending`에도 들어가지 않는다.
-- **`--yes`**: 대화형 확인(편집기 미리보기, 동명 방 선택)을 건너뛴다. 단 동명 방이 실제로 여러 개면 `--yes`여도 전송하지 않고 종료 코드 5.
-- **`--exact`**: 제목 완전 일치로 검색 제한.
+- **첫 실행 게이트**: raw mode 진입 전 `adapter.health_check()`. 카카오톡 미실행/권한 없음이면
+  스택트레이스 대신 `doctor` 수준 안내(`AppError::Onboarding`)로 종료.
+- 트랜스크립트: `Line::Msg{at,who,body,outgoing}` / `Line::System(String)`. 시각은 로컬 타임존 표시,
+  저장·계약은 UTC ISO 8601. `outgoing` 이면 "나".
+- 스크롤: `scrollback` = 바닥에서 위로 올린 행 수. 새 메시지·시스템 라인은 `follow()` 로 바닥 복귀.
 
-## send 상태 머신
+## 슬래시 명령
 
-계약(`docs/adapter-contract.md`)의 상태 머신을 그대로 구현한다:
+| 입력 | Job / 동작 |
+|------|-----------|
+| `/rooms`, `/r` | `Job::ListRooms` |
+| `/switch <이름\|@별칭>`, `/s …` | `Job::Switch{query, exact:false}` |
+| `/alias add <이름> <검색어>` / `/alias list` / `/alias rm <이름>` | `db::alias_*` |
+| `/help`, `/?` | `App::help_text()` 를 트랜스크립트에 |
+| `/quit`, `/q`, `/exit` | `Action::Quit` |
+| 슬래시로 시작 안 함 + Enter | `Job::Send(line)` |
 
-- `sendText` 호출 전 `pending` 로그 생성 (`--dry-run` 제외).
-- 어댑터 `SendResult.status`가 `sent`/`failed`/`unknown` → `send_log`에 최종 상태 기록.
-- `unknown` (계약상 `SEND_VERIFY_TIMEOUT`): "전송 여부를 확인할 수 없습니다. 카카오톡에서 직접 확인하세요." + 종료 코드 6. **자동 재시도 금지.**
-- `failed`: 원인 에러 코드 → 사용자 메시지 + 복구 안내. 종료 코드 7.
-- 상태는 이 경로로만 바뀐다. 다른 곳에서 `send_log.status`를 직접 쓰지 않는다.
+## 방 이름 해석 (`resolve_in_list`)
 
-## SQLite 캐시와 검색
+`/switch` 는 워커가 가져온 방 목록(`Vec<Room>`)에 대해 `resolve::resolve_in_list(rooms, conn, query, exact)`
+→ `Resolution`:
 
-- `docs/db-schema.sql` DDL로 초기화. 사용자 데이터 디렉토리에 DB 파일 (OS별 표준 경로).
-- `inbox`/`rooms`는 어댑터에서 최신을 가져오되, 결과를 `rooms` 테이블에 upsert (오프라인·빠른 재조회용).
-- `readRecent` 결과를 `messages` + `messages_fts`에 저장.
-- `search <검색어>`는 FTS5 쿼리. `--room`으로 방 한정. 결과에 방·발신자·시각·매치 스니펫.
-- `cache clear`는 `rooms`/`messages`/`messages_fts`를 비운다. `aliases`·`send_log`는 건드리지 않는다 (또는 스펙 확인). `--yes` 없으면 확인.
+- `One(room)` → 워커가 `do_switch`
+- `Many(candidates)` → `UiEvent::Ambiguous` → TUI가 **번호 선택 오버레이**. **기본 선택값 없음.**
+  `App::pick(n)` 이 `Job::SwitchTo(room)` 반환. 자동 선택 절대 금지 (오배송 방지)
+- `None{query, near}` → "일치하는 방 없음" + 가까운 이름 힌트
 
-## 개인정보
+`@별칭` 은 `expand_alias` 로 먼저 치환한 뒤 해석. 별칭이 가리키는 이름이 없거나 여러 방과 겹치면
+일반 동명 방 UX로 폴백. 별칭은 절대 서버/텔레메트리로 나가지 않는다.
 
-- 방 이름·최근 메시지·별칭은 로컬 SQLite에만.
-- 로그·텔레메트리·에러 리포트에 **메시지 본문을 넣지 않는다.** `send_log.text`는 로컬 DB 한정.
-- AI 요약·자동 답장은 범위 밖. 구현하지 않는다.
+## send 안전 정책 (`send::send_in_room`)
 
-## 카카오톡 창 비방해
+`send_in_room(adapter, conn, room_id, room_title, body, max_chars) -> SendOutcome`:
 
-- 기본 동작은 카카오톡 창을 전면으로 가져오지 않는다. 어댑터 호출 시 계약이 정한 "비활성" 모드를 쓴다.
+1. `validate_body` — 빈 메시지(`EMPTY_MESSAGE`) / 초과(`MESSAGE_TOO_LONG`)는 `Err` 반환, **`pending` 미진입**.
+2. `db::send_log_pending` — `pending` 행 기록.
+3. `adapter.send_text` → `SendResult` → `db::send_log_resolve` 로 `pending → sent|failed|unknown`.
+4. 상태는 이 경로로만 바뀐다. 코드 곳곳에서 `send_log.status` 를 직접 쓰지 않는다.
+
+- **확인 = Enter.** 활성 방이 이미 정해져 있고 사용자가 직접 입력했으므로. `--dry-run`/`--yes`/`--stdin`/
+  편집기 모드/`--max-chars` 같은 플래그는 없다 (0.1.0에서 제거).
+- 보낸 메시지 텍스트는 **로컬 에코하지 않는다.** 카카오톡이 확인해 watch 폴링에 잡히면(1~2초)
+  `Incoming` 이벤트로 트랜스크립트에 나타난다. 즉시 피드백은 상태줄(`✓ 전송됨 HH:MM`).
+- `unknown`(SEND_VERIFY_TIMEOUT): 상태줄에 "전송 확인 불가", 트랜스크립트에 안내. **재전송 안 함.**
+- `failed`: 원인 에러 코드 → 사용자 메시지.
+
+## SQLite 스크롤백 캐시 (DB v2)
+
+- `docs/db-schema.sql` DDL. `db::open()` 이 `migrate` 로 v1→v2 시 FTS 객체 DROP.
+- 워커가 받은 모든 `message` 이벤트를 `db::insert_messages`(`INSERT OR IGNORE`, `UNIQUE(room_id,at,sender,text)` 로 멱등)로 적재 → 스크롤백·감사.
+- `do_switch` 실패 시 `db::recent_messages(conn, room_id, 40)` 로 캐시에서 트랜스크립트 시드.
+- **FTS5·`search`·`cache clear` 없음.** 별칭·`send_log` 는 유지.
+
+## 첫 실행 온보딩
+
+접근성 권한 미부여, 브리지 미발견, 카카오톡 미실행 등은 스택트레이스가 아니라 `doctor` 수준의
+안내(무엇이/왜/복사할 명령·설정 경로)로 출력한다. `tui::run` 의 게이트와 `commands::onboarding_from_internal`
+이 담당. 처음 쓰는 사람이 이 출력만 보고 다음 행동을 할 수 있어야 한다.
+
+## 개인정보 / 창 비방해
+
+- 방 이름·메시지·별칭·전송 로그는 로컬 SQLite에만. 로그·stderr·텔레메트리에 **메시지 본문 금지**
+  (`send_log.text` 는 로컬 DB 한정 예외).
+- 정상 상태 watch 폴링은 카카오톡 창을 앞으로 가져오지 않는다(어댑터 몫이지만 공통부도 불필요한
+  `openRoom` 재호출을 피한다 — 대화가 열려 있으면 watch 만).
 
 ## 테스트
 
-- 어댑터를 **목**으로 대체하여 공통부 로직을 단위 테스트한다 (이름 해석, 동명 방 분기, 상태 머신, stdin 처리, FTS).
-- 계약 준수 목 응답 샘플을 어댑터 엔지니어와 공유하여 어댑터 완성 전 병렬 개발.
-- 목이라는 것을 코드 주석에 명시.
+- `tests/tui_smoke.rs` — `MockStreamAdapter` + 워커를 헤드리스로 구동: `/rooms` → `/switch` → 수신 → 전송.
+  **동명 방 자동 선택 안 함**을 assert.
+- `tests/core_behaviour.rs` — `resolve_in_list` 의 `Resolution` 분기, `send_in_room` 상태 머신,
+  `db::recent_messages`, 별칭 충돌.
+- `KAKAO_CLI_STREAM_MOCK=crates/kakao-core/tests/fixtures/chat.json cargo run -p kakao-core` — 실제 바이너리 수동 확인.
+- PTY 테스트 시 `TIOCSWINSZ` 로 창 크기 설정 필수(0x0이면 ratatui가 빈 화면).
 
 ## 이전 소스가 있을 때
 
-전체 재작성하지 않는다. 사용자 피드백·QA 지적에 해당하는 모듈만 수정. 계약이 새 버전이면 diff를 확인하고 영향받는 파싱·매핑부만 갱신.
+전체 재작성하지 않는다. 사용자 피드백·QA 지적에 해당하는 모듈만 수정. 계약이 새 버전이면
+`crates/kakao-contract` diff 확인 후 영향받는 파싱·매핑·이벤트 처리부만 갱신.

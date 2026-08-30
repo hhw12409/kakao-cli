@@ -1,0 +1,18 @@
+{
+  "rooms": [
+    { "roomId": "row:0", "title": "가족", "memberCount": 4, "unreadCount": 1,
+      "lastMessage": { "text": "저녁 뭐 먹지", "at": "2026-08-31T09:00:00Z", "sender": "엄마" } },
+    { "roomId": "row:1", "title": "개발팀", "memberCount": 12, "unreadCount": 0, "lastMessage": null },
+    { "roomId": "row:2", "title": "개발 잡담", "memberCount": 8, "unreadCount": 0, "lastMessage": null }
+  ],
+  "history": {
+    "row:0": [
+      { "sender": "엄마", "text": "저녁 뭐 먹지", "at": "2026-08-31T09:00:00Z", "outgoing": false, "kind": "text" },
+      { "sender": "",     "text": "치킨이요",     "at": "2026-08-31T09:00:30Z", "outgoing": true,  "kind": "text" }
+    ]
+  },
+  "incoming": [
+    { "afterMs": 150, "roomId": "row:0",
+      "message": { "sender": "아빠", "text": "좋아 치킨", "at": "2026-08-31T09:01:00Z", "outgoing": false, "kind": "text" } }
+  ]
+}

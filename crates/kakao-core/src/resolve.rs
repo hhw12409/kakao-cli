@@ -1,45 +1,40 @@
 //! Room-name resolution — the core of misdelivery prevention
 //! (`docs/command-spec.md` "이름 해석").
 //!
-//! Exactly one match proceeds. Several matches show a numbered list with NO
-//! default selection; non-interactive callers get `RoomAmbiguous` (exit 5).
-//! Zero matches is `RoomNotFound` (exit 2).
+//! Exactly one match proceeds. Several matches are returned as candidates with
+//! NO default selection — the caller (the TUI `/switch` overlay) makes the
+//! choice explicit. Zero matches carries a "did you mean" nudge.
 
 use kakao_contract::Room;
 use rusqlite::Connection;
 
-use crate::adapter::Adapter;
 use crate::db;
 use crate::error::{AppError, AppResult};
-use crate::render;
 use crate::time_util;
 
-/// How the caller may interact during resolution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Interactivity {
-    /// May prompt the user to pick from candidates.
-    Interactive,
-    /// Must not prompt (`--yes`, or stdin/stderr is not a tty). Ambiguity is an
-    /// error.
-    NonInteractive,
+/// Outcome of resolving a `/switch` query against the current room list.
+#[derive(Debug, Clone)]
+pub enum Resolution {
+    /// Exactly one room matched.
+    One(Room),
+    /// Several rooms matched. The caller must disambiguate — never auto-pick.
+    Many(Vec<Room>),
+    /// Nothing matched.
+    None { query: String, near: Vec<String> },
 }
 
-/// Resolve `query` (a search string or `@alias`) to exactly one room.
-pub fn resolve_room(
-    adapter: &dyn Adapter,
+/// Resolve `query` (a search string or `@alias`) against an already-fetched
+/// room list. `conn` is used only to expand aliases.
+pub fn resolve_in_list(
+    rooms: &[Room],
     conn: &Connection,
     query: &str,
     exact: bool,
-    interactivity: Interactivity,
-) -> AppResult<Room> {
+) -> AppResult<Resolution> {
     let effective = expand_alias(conn, query)?;
-
-    let listing = adapter.list_rooms()?;
-    db::upsert_rooms(conn, &listing.rooms)?;
-
     let needle = effective.to_lowercase();
-    let mut matches: Vec<Room> = listing
-        .rooms
+
+    let matches: Vec<Room> = rooms
         .iter()
         .filter(|r| {
             if exact {
@@ -51,23 +46,30 @@ pub fn resolve_room(
         .cloned()
         .collect();
 
-    match matches.len() {
-        1 => Ok(matches.pop().unwrap()),
-        0 => Err(AppError::RoomNotFound {
+    Ok(match matches.len() {
+        1 => Resolution::One(matches.into_iter().next().unwrap()),
+        0 => Resolution::None {
             query: effective.clone(),
-            near: near_names(&listing.rooms, &effective),
-        }),
-        _ => match interactivity {
-            Interactivity::NonInteractive => Err(AppError::RoomAmbiguous {
-                candidates: matches.iter().map(candidate_line).collect(),
-            }),
-            Interactivity::Interactive => {
-                let lines: Vec<String> = matches.iter().map(candidate_line).collect();
-                let idx = render::choose("여러 채팅방이 일치합니다.", &lines)?;
-                Ok(matches.swap_remove(idx))
-            }
+            near: near_names(rooms, &effective),
         },
-    }
+        _ => Resolution::Many(matches),
+    })
+}
+
+/// One-line description of a candidate room, for the disambiguation overlay.
+pub fn candidate_line(r: &Room) -> String {
+    let members = match r.member_count {
+        Some(n) => format!("{n}명"),
+        None => "인원 미상".to_string(),
+    };
+    let last = match &r.last_message {
+        Some(m) => match time_util::parse_iso(&m.at) {
+            Some(dt) => format!("마지막 메시지 {}", time_util::relative_ko(dt)),
+            None => "마지막 메시지 시각 미상".to_string(),
+        },
+        None => "메시지 없음".to_string(),
+    };
+    format!("{}  {members} · {last}", r.title)
 }
 
 /// `@dev` -> the alias's stored room_query. A non-alias string is returned
@@ -85,23 +87,7 @@ fn expand_alias(conn: &Connection, query: &str) -> AppResult<String> {
     }
 }
 
-fn candidate_line(r: &Room) -> String {
-    let members = match r.member_count {
-        Some(n) => format!("{n}명"),
-        None => "인원 미상".to_string(),
-    };
-    let last = match &r.last_message {
-        Some(m) => match time_util::parse_iso(&m.at) {
-            Some(dt) => format!("마지막 메시지 {}", time_util::relative_ko(dt)),
-            None => "마지막 메시지 시각 미상".to_string(),
-        },
-        None => "메시지 없음".to_string(),
-    };
-    format!("{}  {members} · {last}", r.title)
-}
-
-/// Cheap "did you mean" hint: titles sharing a token or a common substring
-/// with the query. Not a fuzzy matcher — just a nudge.
+/// Cheap "did you mean" hint: titles sharing a character with the query.
 fn near_names(rooms: &[Room], query: &str) -> Vec<String> {
     let q = query.to_lowercase();
     let mut out: Vec<String> = rooms

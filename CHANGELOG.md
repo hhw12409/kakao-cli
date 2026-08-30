@@ -5,7 +5,35 @@ macOS PoC → `send` 완성 → Windows 어댑터 → inbox/검색.
 
 ## [Unreleased]
 
-### Added
+### Changed — BREAKING: 대화형 채팅 클라이언트로 전환 (계약 v2.0.0)
+
+kakao-cli 는 이제 one-shot 서브명령 집합이 아니라 **대화형 터미널 채팅 클라이언트**다.
+`kakao-cli` 를 인자 없이 실행하면 채팅 TUI가 열린다. 근거: `docs/adr/0003-interactive-tui.md`.
+
+- **제거된 서브명령**: `send` · `rooms` · `open` · `inbox` · `search` · `alias` · `cache`.
+  방 이동·별칭은 채팅 화면 안의 슬래시 명령(`/switch`, `/rooms`, `/alias`)으로.
+  `doctor` 만 서브명령으로 남는다.
+- **새 전송로 — serve 모드**: `kakao-<os>-bridge serve` 장수 프로세스 + 줄 단위 JSON-RPC
+  + `message` 이벤트 스트림 (계약 §5). one-shot 프레이밍은 `doctor` 와 셀프테스트용으로 유지.
+- **수신 = 폴링**: 브리지가 watch 중인 방의 접근성 트리를 1.5초 간격으로 읽어 새 메시지를
+  이벤트로 밀어 준다. de-dup은 브리지가 소유. 체감 지연 1~2초.
+- **계약 v2.0.0** (`crates/kakao-contract`): `ServeRequest` / `ServeResponse` / `ServeEvent`
+  추가, `Method` 에 `Watch`/`Unwatch`/`Shutdown`. `Message`/`Room`/`SendResult`/`Health`/
+  `ErrorCode` 와이어 타입과 send 상태 머신은 불변.
+- **공통부**: `tui/` 모듈(ratatui + crossterm), 어댑터 워커 스레드, `StreamAdapter` 트레잇
+  + `ServeAdapter` + `MockStreamAdapter`(`KAKAO_CLI_STREAM_MOCK`). `send::send_in_room`,
+  `resolve::resolve_in_list`(동명 방은 `Resolution::Many` 로 반환, 자동 선택 없음).
+- **DB v2**: FTS5 검색 객체 제거 (`search` 명령이 없어짐). 마이그레이션이 `messages_fts` 를 DROP.
+- **macOS 브리지**: `serve` 서브명령 + `Serve.swift`(watch 폴러, AX 접근 단일 락 직렬화).
+  임베디드 대화 pane 하드닝은 라이브 AX 덤프 필요 — 후속. 현재 분리 대화 창 경로로 동작.
+- **Windows 브리지**: `serve` 프로토콜 파리티 + 스텁(`serve.rs`). 라이브 UIA watch 폴러는 후속.
+- **검증**: `cargo test --workspace` 그린 (`tests/tui_smoke.rs` 포함 — `/rooms` → `/switch`
+  → 수신 → 전송 헤드리스 구동, 동명 방 자동 선택 안 함). macOS serve framing 실기기 확인
+  (권한 게이트까지). 실기기 메시지 흐름은 접근성 권한 부여 후 검증 필요.
+
+**마이그레이션**: 0.1.0 을 스크립트에서 쓰던 경우 대체재가 없다 — kakao-cli 는 대화형 도구다.
+
+### Added (이전)
 
 - **Windows 어댑터 골격** (`adapters/windows`, Rust + windows-rs 0.58):
   - `kakao-contract` 크레이트를 직접 공유 — 타입·에러 코드 재구현 없음 (macOS는

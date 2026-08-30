@@ -129,3 +129,9 @@ impl From<rusqlite::Error> for AppError {
         AppError::Internal(format!("로컬 DB: {e}"))
     }
 }
+
+impl From<std::io::Error> for AppError {
+    fn from(e: std::io::Error) -> Self {
+        AppError::Internal(format!("터미널 입출력: {e}"))
+    }
+}

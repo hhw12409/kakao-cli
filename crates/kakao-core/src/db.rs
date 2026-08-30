@@ -1,7 +1,10 @@
-//! SQLite cache, aliases, send log, FTS5 search.
+//! SQLite cache, aliases, send log.
 //!
 //! Column names are snake_case; the adapter's camelCase JSON is converted here
 //! on the way in. The DDL is kept in sync with `docs/db-schema.sql`.
+//!
+//! The TUI writes each message it sees here (idempotent via the UNIQUE
+//! constraint) for scrollback across sessions and a send audit trail.
 
 use kakao_contract::{ErrorCode, Message, MessageKind, Room, SendStatus};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -39,27 +42,6 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_room_at ON messages(room_id, at);
 
-CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-    text, sender UNINDEXED, room_id UNINDEXED,
-    content = 'messages', content_rowid = 'id',
-    tokenize = 'unicode61 remove_diacritics 2'
-);
-
-CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
-    INSERT INTO messages_fts(rowid, text, sender, room_id)
-    VALUES (new.id, new.text, new.sender, new.room_id);
-END;
-CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-    INSERT INTO messages_fts(messages_fts, rowid, text, sender, room_id)
-    VALUES ('delete', old.id, old.text, old.sender, old.room_id);
-END;
-CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
-    INSERT INTO messages_fts(messages_fts, rowid, text, sender, room_id)
-    VALUES ('delete', old.id, old.text, old.sender, old.room_id);
-    INSERT INTO messages_fts(rowid, text, sender, room_id)
-    VALUES (new.id, new.text, new.sender, new.room_id);
-END;
-
 CREATE TABLE IF NOT EXISTS aliases (
     name       TEXT PRIMARY KEY,
     room_query TEXT NOT NULL,
@@ -85,7 +67,15 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 "#;
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
+
+/// v1 -> v2: drop the FTS5 search objects (the `search` command is gone).
+const MIGRATE_1_TO_2: &str = r#"
+DROP TRIGGER IF EXISTS messages_ai;
+DROP TRIGGER IF EXISTS messages_ad;
+DROP TRIGGER IF EXISTS messages_au;
+DROP TABLE IF EXISTS messages_fts;
+"#;
 
 /// Open the cache DB and ensure the schema exists.
 pub fn open() -> AppResult<Connection> {
@@ -107,8 +97,12 @@ fn migrate(conn: &Connection) -> AppResult<()> {
     if current == 0 {
         conn.execute_batch(SCHEMA)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        return Ok(());
     }
-    // Future migrations: match on `current` and step up to SCHEMA_VERSION.
+    if current < 2 {
+        conn.execute_batch(MIGRATE_1_TO_2)?;
+        conn.pragma_update(None, "user_version", 2)?;
+    }
     Ok(())
 }
 
@@ -191,83 +185,31 @@ pub fn ensure_room(conn: &Connection, room_id: &str, title: &str) -> AppResult<(
     Ok(())
 }
 
-// --------------------------------------------------------------------------
-// search (FTS5)
-// --------------------------------------------------------------------------
-
-pub struct SearchHit {
-    pub room_title: String,
-    pub sender: String,
-    pub at: String,
-    pub snippet: String,
-}
-
-pub fn search(
-    conn: &Connection,
-    query: &str,
-    room_id: Option<&str>,
-) -> AppResult<Vec<SearchHit>> {
-    let fts_query = to_fts_query(query);
-    let mut sql = String::from(
-        "SELECT COALESCE(r.title, m.room_id), m.sender, m.at,
-                snippet(messages_fts, 0, '[', ']', '…', 8)
-         FROM messages_fts
-         JOIN messages m ON m.id = messages_fts.rowid
-         LEFT JOIN rooms r ON r.room_id = m.room_id
-         WHERE messages_fts MATCH ?1",
-    );
-    if room_id.is_some() {
-        sql.push_str(" AND m.room_id = ?2");
-    }
-    sql.push_str(" ORDER BY m.at DESC LIMIT 50");
-
-    let mut stmt = conn.prepare(&sql)?;
-    let map_row = |row: &rusqlite::Row| {
-        Ok(SearchHit {
-            room_title: row.get(0)?,
-            sender: row.get(1)?,
-            at: row.get(2)?,
-            snippet: row.get(3)?,
-        })
-    };
-    let rows = match room_id {
-        Some(rid) => stmt
-            .query_map(params![fts_query, rid], map_row)?
-            .collect::<Result<Vec<_>, _>>()?,
-        None => stmt
-            .query_map(params![fts_query], map_row)?
-            .collect::<Result<Vec<_>, _>>()?,
-    };
+/// Most recent cached messages for a room, oldest -> newest. Used to seed the
+/// TUI transcript before the first live read returns.
+pub fn recent_messages(conn: &Connection, room_id: &str, limit: u32) -> AppResult<Vec<Message>> {
+    let mut stmt = conn.prepare(
+        "SELECT sender, text, at, outgoing, kind FROM messages
+         WHERE room_id = ?1 ORDER BY at DESC, id DESC LIMIT ?2",
+    )?;
+    let mut rows: Vec<Message> = stmt
+        .query_map(params![room_id, limit], |r| {
+            let kind: String = r.get(4)?;
+            Ok(Message {
+                sender: r.get(0)?,
+                text: r.get(1)?,
+                at: r.get(2)?,
+                outgoing: r.get::<_, i64>(3)? != 0,
+                kind: if kind == "unsupported" {
+                    MessageKind::Unsupported
+                } else {
+                    MessageKind::Text
+                },
+            })
+        })?
+        .collect::<Result<_, _>>()?;
+    rows.reverse();
     Ok(rows)
-}
-
-/// Quote each whitespace-separated term so FTS5 treats punctuation-heavy user
-/// input literally instead of as query syntax.
-fn to_fts_query(raw: &str) -> String {
-    raw.split_whitespace()
-        .map(|t| format!("\"{}\"", t.replace('"', "\"\"")))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-pub fn is_message_cache_empty(conn: &Connection) -> AppResult<bool> {
-    let n: i64 = conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?;
-    Ok(n == 0)
-}
-
-// --------------------------------------------------------------------------
-// cache clear
-// --------------------------------------------------------------------------
-
-/// Clears `rooms` / `messages` / `messages_fts`. Leaves `aliases` and
-/// `send_log` untouched (command-spec).
-pub fn clear_cache(conn: &Connection) -> AppResult<()> {
-    let tx = conn.unchecked_transaction()?;
-    tx.execute("DELETE FROM messages", [])?;
-    tx.execute("DELETE FROM rooms", [])?;
-    tx.execute("INSERT INTO messages_fts(messages_fts) VALUES ('rebuild')", [])?;
-    tx.commit()?;
-    Ok(())
 }
 
 // --------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 import Foundation
 
-/// Types mirroring `docs/adapter-contract.md` v1.0.0.
+/// Types mirroring `docs/adapter-contract.md` v2.0.0.
 ///
 /// JSON boundary is camelCase (the default here). All timestamps are ISO 8601
 /// UTC strings. `roomId` is an opaque string the core never parses.
 
-let contractVersion = "1.0.0"
+let contractVersion = "2.0.0"
 
 // MARK: - Error codes (closed set; must match kakao-contract::ErrorCode)
 
@@ -100,6 +100,44 @@ struct Health: Codable, Equatable {
     let accessibilityGranted: Bool
     let appVersion: String?
     let issues: [Issue]
+}
+
+// MARK: - serve-mode framing (docs/adapter-contract.md §5)
+
+/// Success reply to one `ServeRequest`, correlated by `id`.
+struct ServeOk<T: Encodable>: Encodable {
+    let id: UInt64
+    let ok = true
+    let data: T
+}
+
+/// Failure reply to one `ServeRequest`.
+struct ServeErr: Encodable {
+    let id: UInt64
+    let ok = false
+    let error: ErrorCode
+}
+
+/// `data` payload for methods that just acknowledge (openRoom/watch/unwatch).
+struct EmptyData: Encodable {}
+
+/// Unsolicited: a newly appended message in the watched room.
+struct MessageEvent: Encodable {
+    let event = "message"
+    let roomId: String
+    let message: Message
+}
+
+/// Unsolicited: the watched conversation is no longer open in KakaoTalk.
+struct RoomClosedEvent: Encodable {
+    let event = "roomClosed"
+    let roomId: String
+}
+
+/// Unsolicited: a transient watch condition (advisory).
+struct ErrorEvent: Encodable {
+    let event = "error"
+    let code: ErrorCode
 }
 
 // MARK: - time

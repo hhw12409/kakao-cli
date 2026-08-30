@@ -2,15 +2,23 @@
 //!
 //! This crate is the single definition of the common-core <-> OS-adapter
 //! boundary. Both `kakao-core` and the Windows bridge depend on it so the JSON
-//! shapes and error codes cannot drift. See `docs/adapter-contract.md` (v1.0.0).
+//! shapes and error codes cannot drift. See `docs/adapter-contract.md` (v2.0.0).
 //!
 //! JSON boundary is camelCase. All timestamps are ISO 8601 UTC strings.
+//!
+//! Two transports share these types:
+//!   * **serve mode** (primary) — a long-lived `kakao-<os>-bridge serve` process
+//!     speaking newline-delimited JSON: [`ServeRequest`] in, [`ServeResponse`] /
+//!     [`ServeEvent`] out. Drives the interactive TUI.
+//!   * **one-shot** (retained) — `kakao-<os>-bridge <method> <argsJson>` writing a
+//!     single [`AdapterResponse`] line. Used only by `doctor` (healthCheck) and
+//!     the bridge self-tests.
 
 use serde::{Deserialize, Serialize};
 
 /// Contract version this crate implements. Bump together with
 /// `docs/adapter-contract.md`.
-pub const CONTRACT_VERSION: &str = "1.1.0";
+pub const CONTRACT_VERSION: &str = "2.0.0";
 
 // ===========================================================================
 // Error codes (closed enum). Adapters MUST NOT return any string outside this.
@@ -228,7 +236,10 @@ impl AdapterResponse {
     }
 }
 
-/// The five contract methods, used to build the argv request.
+/// The contract methods, used to build a request in either transport.
+///
+/// `ListRooms` / `OpenRoom` / `ReadRecent` / `SendText` / `HealthCheck` exist in
+/// both transports; `Watch` / `Unwatch` / `Shutdown` are serve-mode only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Method {
     ListRooms,
@@ -236,6 +247,9 @@ pub enum Method {
     ReadRecent,
     SendText,
     HealthCheck,
+    Watch,
+    Unwatch,
+    Shutdown,
 }
 
 impl Method {
@@ -246,16 +260,121 @@ impl Method {
             Method::ReadRecent => "readRecent",
             Method::SendText => "sendText",
             Method::HealthCheck => "healthCheck",
+            Method::Watch => "watch",
+            Method::Unwatch => "unwatch",
+            Method::Shutdown => "shutdown",
         }
     }
 
-    /// Per-method IPC timeout in milliseconds (docs/adapter-contract.md §1).
-    /// The non-send budget accommodates a cold accessibility-tree walk on a
-    /// large KakaoTalk window.
+    pub fn from_wire(name: &str) -> Option<Self> {
+        Some(match name {
+            "listRooms" => Method::ListRooms,
+            "openRoom" => Method::OpenRoom,
+            "readRecent" => Method::ReadRecent,
+            "sendText" => Method::SendText,
+            "healthCheck" => Method::HealthCheck,
+            "watch" => Method::Watch,
+            "unwatch" => Method::Unwatch,
+            "shutdown" => Method::Shutdown,
+            _ => return None,
+        })
+    }
+
+    /// Per-call IPC timeout in milliseconds for the **one-shot** transport
+    /// (docs/adapter-contract.md §1). The non-send budget accommodates a cold
+    /// accessibility-tree walk on a large KakaoTalk window. Serve mode does not
+    /// use this — its requests are answered from a warm context.
     pub fn timeout_ms(self) -> u64 {
         match self {
             Method::SendText => 12_000,
             _ => 8_000,
+        }
+    }
+}
+
+// ===========================================================================
+// Serve-mode framing (docs/adapter-contract.md §5)
+// ===========================================================================
+
+/// One newline-delimited request the core writes to the serve process's stdin.
+///
+/// `id` correlates the matching [`ServeResponse`]. `id` 0 is reserved for
+/// `shutdown` (which gets no response). `params` shape is per method, mirroring
+/// the one-shot `argsJson` (e.g. `{"roomId": "...", "limit": 40}`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServeRequest {
+    pub id: u64,
+    pub method: String,
+    #[serde(default)]
+    pub params: serde_json::Value,
+}
+
+impl ServeRequest {
+    pub fn new(id: u64, method: Method, params: serde_json::Value) -> Self {
+        Self { id, method: method.wire_name().to_string(), params }
+    }
+}
+
+/// A reply to exactly one [`ServeRequest`], correlated by `id`.
+///
+/// Success: `{"id":3,"ok":true,"data":<shape>}`.
+/// Failure: `{"id":4,"ok":false,"error":"<CODE>"}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServeResponse {
+    pub id: u64,
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorCode>,
+}
+
+impl ServeResponse {
+    pub fn ok(id: u64, data: serde_json::Value) -> Self {
+        Self { id, ok: true, data: Some(data), error: None }
+    }
+    pub fn err(id: u64, error: ErrorCode) -> Self {
+        Self { id, ok: false, data: None, error: Some(error) }
+    }
+}
+
+/// An unsolicited message the serve process pushes between responses.
+///
+/// * `message` — a newly appended message in the watched room. The bridge owns
+///   de-duplication; the core appends every one it receives.
+/// * `roomClosed` — the watched conversation is no longer open in KakaoTalk
+///   (the user navigated away). The core stops expecting messages until the
+///   next `watch`.
+/// * `error` — a transient condition while watching (e.g. window minimized).
+///   Advisory; the bridge keeps retrying.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event")]
+pub enum ServeEvent {
+    #[serde(rename = "message", rename_all = "camelCase")]
+    Message { room_id: String, message: Message },
+    #[serde(rename = "roomClosed", rename_all = "camelCase")]
+    RoomClosed { room_id: String },
+    #[serde(rename = "error")]
+    Error { code: ErrorCode },
+}
+
+/// Anything the core reads from the serve process's stdout: a correlated
+/// [`ServeResponse`] or an unsolicited [`ServeEvent`].
+#[derive(Debug, Clone)]
+pub enum ServeMessage {
+    Response(ServeResponse),
+    Event(ServeEvent),
+}
+
+impl ServeMessage {
+    /// Parse one stdout line. An object carrying an `"event"` key is an event;
+    /// anything else is a response.
+    pub fn parse(line: &str) -> Result<Self, serde_json::Error> {
+        let value: serde_json::Value = serde_json::from_str(line)?;
+        if value.get("event").is_some() {
+            Ok(ServeMessage::Event(serde_json::from_value(value)?))
+        } else {
+            Ok(ServeMessage::Response(serde_json::from_value(value)?))
         }
     }
 }

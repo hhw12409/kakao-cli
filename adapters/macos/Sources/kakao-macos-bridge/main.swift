@@ -1,18 +1,23 @@
 import Foundation
 
-/// kakao-macos-bridge — subprocess adapter for kakao-cli.
+/// kakao-macos-bridge — OS adapter for kakao-cli.
 ///
-/// Invocation (contract §1):  kakao-macos-bridge <method> <argsJson>
-///   methods: listRooms | openRoom | readRecent | sendText | healthCheck
+/// Two transports:
+///   * `kakao-macos-bridge serve`            — long-lived, newline-delimited
+///     JSON (contract §5). Primary; drives the interactive TUI.
+///   * `kakao-macos-bridge <method> <json>`  — one-shot, one line out
+///     (contract §1). Used by `doctor` (healthCheck) and the self-tests.
 ///
-/// Output: exactly one line of JSON on stdout:
-///   {"ok":true,"data":<...>}   or   {"ok":false,"error":"<CODE>"}
-/// Exit code is always 0 for handled results; non-zero means the bridge itself
-/// crashed. Diagnostics go to stderr and never contain message bodies.
+/// Diagnostics go to stderr and never contain message bodies.
 
 setbuf(stdout, nil)
 
 let args = Array(CommandLine.arguments.dropFirst())
+
+// Serve mode: long-lived, reads requests from stdin until EOF.
+if args.first == "serve" {
+    Serve.run()
+}
 
 // Dev helper: dump the KakaoTalk accessibility tree as fixture JSON.
 if args.first == "--dump-tree" {
