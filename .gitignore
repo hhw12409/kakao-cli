@@ -10,6 +10,9 @@ docs/
 **/target/
 # Cargo.lock IS committed — kakao-cli ships binaries and the formula builds --locked.
 
+# 로컬 릴리스 레이아웃 (scripts/build-release.sh 산출물)
+/dist/
+
 # Swift / Xcode (macOS 브리지)
 adapters/macos/.build/
 adapters/macos/*.xcodeproj/xcuserdata/
