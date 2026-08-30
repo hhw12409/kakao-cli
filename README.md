@@ -9,6 +9,14 @@
 > **상태: 개발 중.** 공통부 TUI + serve 모드 브리지는 구현·검증됨(목 어댑터). macOS
 > 실기기 메시지 흐름 검증과 Windows 라이브 구현은 진행 중. 로드맵 참조.
 
+## 빠른 시작
+
+1. 카카오톡 데스크톱 앱을 실행하고 로그인한다. **창을 최소화하지 않는다.**
+2. `kakao-cli` 를 설치한다 (아래 [설치](#설치)).
+3. `kakao-cli doctor` 로 권한을 확인하고, 안내대로 접근성(자동화) 권한을 준다.
+4. `kakao-cli` 를 실행한다 → 채팅 화면이 열린다.
+5. `/switch 가족` 처럼 방을 고르고, 메시지를 입력해 Enter.
+
 ## 쓰는 법
 
 ```bash
@@ -22,7 +30,7 @@ kakao-cli doctor     # 카카오톡 실행 상태와 자동화 권한 진단
 <메시지> Enter              현재 방으로 전송
 /switch <이름|@별칭>        방 이동 (동명이면 번호로 선택)
 /rooms                     방 목록
-/alias add dev "개발팀"     별칭 추가   ·   /alias list   ·   /alias rm dev
+/alias add dev 개발팀       별칭 추가   ·   /alias list   ·   /alias rm dev
 /help                      명령 목록
 /quit                      종료
 PgUp / PgDn                스크롤       ·   Ctrl-C  종료
@@ -88,13 +96,16 @@ scoop install kakao-cli
 
 ### 소스에서
 
+필요: Rust(`rustup`), Swift(Xcode Command Line Tools).
+
 ```bash
 git clone https://github.com/hhw12409/kakao-cli && cd kakao-cli
-./scripts/build-release.sh dist
+./scripts/build-release.sh dist     # cargo + swift 빌드 + ad-hoc 서명 + 레이아웃
 dist/bin/kakao-cli doctor
+dist/bin/kakao-cli                  # 채팅 화면
 ```
 
-개발 빌드:
+개발 빌드 (브리지가 keg에 없으므로 경로를 알려준다):
 
 ```bash
 cargo build
@@ -102,16 +113,20 @@ swift build --package-path adapters/macos
 KAKAO_CLI_BRIDGE_PATH=adapters/macos/.build/debug/kakao-macos-bridge \
   ./target/debug/kakao-cli
 
-# 카카오톡 없이 UI만 확인:
+# 카카오톡 없이 UI만 확인 (목 어댑터):
 KAKAO_CLI_STREAM_MOCK=crates/kakao-core/tests/fixtures/chat.json \
   ./target/debug/kakao-cli
+
+cargo test --workspace                       # 전체 테스트
+swift run --package-path adapters/macos kakao-macos-bridge --self-test
 ```
 
 ## 개인정보
 
 - 방 이름 · 최근 메시지 · 별칭 · 전송 기록은 **로컬 SQLite** 에만 저장한다
-  (`~/Library/Application Support/kakao-cli/`).
-- 텔레메트리 · 로그 · 오류 리포트에 **메시지 본문을 넣지 않는다.**
+  (macOS `~/Library/Application Support/kakao-cli/`, Windows `%APPDATA%\kakao-cli\`).
+- 텔레메트리 · 로그 · 오류 리포트에 **메시지 본문을 넣지 않는다.** (전송 로그의 본문은
+  로컬 감사용으로 그 DB에만 있고 전송되지 않는다.)
 - 어떤 서버로도 데이터를 전송하지 않는다. AI 요약 · 자동 답장은 범위 밖이다.
 
 ## 성격
