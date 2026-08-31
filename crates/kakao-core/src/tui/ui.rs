@@ -135,17 +135,27 @@ fn render_chat(f: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_header(f: &mut Frame, area: Rect, app: &App, title: &str) {
-    let dot = if app.connected { "●" } else { "○" };
-    let line = TuiLine::from(vec![
-        Span::styled(
-            format!(" {dot} "),
-            Style::default().fg(if app.connected { Color::Green } else { Color::Red }),
-        ),
+    let (dot, dot_color) = if app.offline {
+        ("◐", Color::Yellow)
+    } else if app.connected {
+        ("●", Color::Green)
+    } else {
+        ("○", Color::Red)
+    };
+    let mut spans = vec![
+        Span::styled(format!(" {dot} "), Style::default().fg(dot_color)),
         Span::styled(
             format!("kakao-cli — {title}"),
             Style::default().add_modifier(Modifier::BOLD),
         ),
-    ]);
+    ];
+    if app.offline {
+        spans.push(Span::styled(
+            "  · 캐시(읽기 전용)",
+            Style::default().fg(Color::Yellow),
+        ));
+    }
+    let line = TuiLine::from(spans);
     f.render_widget(
         Paragraph::new(line).style(Style::default().bg(Color::Rgb(30, 30, 40))),
         area,

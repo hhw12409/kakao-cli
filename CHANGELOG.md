@@ -33,6 +33,23 @@ kakao-cli 는 이제 one-shot 서브명령 집합이 아니라 **대화형 터�
 
 **마이그레이션**: 0.1.0 을 스크립트에서 쓰던 경우 대체재가 없다 — kakao-cli 는 대화형 도구다.
 
+### Added — 카카오톡 창을 kakao-cli 가 관리
+
+사용자가 카카오톡 창을 직접 띄워 두고 최소화하지 않아야 했던 제약을 없앤다.
+
+- **macOS serve 브리지**: 시작 시 카카오톡 상태를 스냅샷 → 요청 전 `WindowControl.ensureAwake`
+  (미실행이면 `NSWorkspace.openApplication`, 숨김/최소화면 복원, 창 없으면 재오픈) →
+  `shutdown`/EOF 시 스냅샷대로 복원(재최소화, serve 가 실행했으면 종료 — `KAKAO_CLI_KEEP_KAKAO`
+  로 무력화). one-shot(`doctor`)은 상태를 보고만 한다.
+- **오프라인(캐시) 모드**: 카카오톡을 끝내 띄우지 못하면 TUI 가 종료하지 않고 마지막
+  동기화분(방 목록·대화)을 읽기 전용으로 표시(`◐ · 캐시`). 전송 거부. `/rooms`·`/switch`
+  가 라이브 재시도, 성공 시 자동 복귀. `db::cached_rooms` + 워커 폴백 + `UiEvent::Offline/Online`.
+- **첫 실행 게이트 완화**: 카카오톡 미실행은 더 이상 TUI 를 막지 않는다(브리지가 실행/캐시로
+  처리). 접근성 권한·앱 버전만 하드 게이트.
+- 브리지: `AX.bool` 헬퍼(`CFBoolean` → Swift `Bool` 는 `as?` 로 안 됨), `KakaoApp.launch` /
+  `waitUntilWindowReady`, `--wake` 디버그 커맨드.
+- **넘을 수 없는 선**: 카카오톡이 설치·1회 로그인돼 있어야 한다(프로세스 없으면 AX 트리 없음).
+
 ### Changed — 채팅 TUI 탐색 방식
 
 - **방 목록이 첫 화면.** `kakao-cli` 실행 시 곧바로 방 목록을 불러와 보여 준다.

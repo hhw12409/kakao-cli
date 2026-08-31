@@ -16,13 +16,28 @@ enum Serve {
     static var watcher: Watcher?
 
     static func run() -> Never {
+        // Serve mode manages the KakaoTalk window for the user: launch it,
+        // un-minimise / reopen, and put it back on exit.
+        Bridge.autoManage = true
+        Bridge.priorState = WindowControl.capture()
+
         // stdin is line-delimited requests; EOF (core exited) ends the process.
         while let line = readLine(strippingNewline: true) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }
             handle(trimmed)
         }
+        shutdown()
+    }
+
+    /// Stop the watcher, restore KakaoTalk's window state, exit.
+    private static func shutdown() -> Never {
         watcher?.stop()
+        if let prior = Bridge.priorState {
+            axLock.lock()
+            WindowControl.restore(prior)
+            axLock.unlock()
+        }
         exit(0)
     }
 
@@ -100,8 +115,7 @@ enum Serve {
             out.send(ServeOk(id: id, data: EmptyData()))
 
         case "shutdown":
-            watcher?.stop()
-            exit(0)
+            shutdown()
 
         default:
             out.send(ServeErr(id: id, error: .uiElementNotFound))

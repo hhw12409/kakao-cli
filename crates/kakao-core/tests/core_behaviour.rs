@@ -185,3 +185,26 @@ fn alias_conflict_is_exit_9() {
     let err = db::alias_add(&conn, "dev", "다른방").unwrap_err();
     assert_eq!(err.exit_code(), 9);
 }
+
+#[test]
+fn cached_rooms_round_trips_for_offline_view() {
+    let conn = db::open_in_memory().unwrap();
+    let mut src = rooms();
+    src[0].unread_count = 3;
+    src[1].last_message = Some(kakao_contract::LastMessage {
+        text: "회의 시작".into(),
+        at: "2026-08-31T09:00:00Z".into(),
+        sender: "팀장".into(),
+    });
+    db::upsert_rooms(&conn, &src).unwrap();
+
+    let cached = db::cached_rooms(&conn).unwrap();
+    assert_eq!(cached.len(), 3);
+    // listing order preserved
+    assert_eq!(cached[0].title, "개발팀");
+    assert_eq!(cached[0].unread_count, 3);
+    assert_eq!(
+        cached[1].last_message.as_ref().map(|m| m.text.as_str()),
+        Some("회의 시작")
+    );
+}

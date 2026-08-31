@@ -16,7 +16,7 @@ mod stream;
 mod subprocess;
 
 pub use mock::MockAdapter;
-pub use mock_stream::MockStreamAdapter;
+pub use mock_stream::{MockAvailability, MockStreamAdapter};
 pub use serve::ServeAdapter;
 pub use stream::{StreamAdapter, StreamEvent};
 pub use subprocess::SubprocessAdapter;

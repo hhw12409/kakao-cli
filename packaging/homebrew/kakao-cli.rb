@@ -75,8 +75,9 @@ class KakaoCli < Formula
       Then enable kakao-cli in:
         System Settings → Privacy & Security → Accessibility
 
-      Keep the KakaoTalk window open (not minimized) while chatting — kakao-cli
-      polls its accessibility tree for new messages.
+      Log into the KakaoTalk desktop app once. kakao-cli launches it and
+      restores its window as needed, and puts it back when you quit. If it
+      can't be brought up, kakao-cli shows the last-synced rooms read-only.
     EOS
   end
 

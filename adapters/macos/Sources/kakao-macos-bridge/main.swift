@@ -36,6 +36,12 @@ if args.first == "--windows" {
     exit(0)
 }
 
+// Debug: exercise the serve-mode window wake path with tracing.
+if args.first == "--wake" {
+    Debug.wake()
+    exit(0)
+}
+
 // Debug: show the AXActions available on a chat-list row. `--actions row:3`
 if args.first == "--actions" {
     Debug.actions(roomId: args.count > 1 ? args[1] : "row:0")

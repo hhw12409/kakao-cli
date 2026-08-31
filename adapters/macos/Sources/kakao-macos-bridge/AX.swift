@@ -41,6 +41,15 @@ enum AX {
         copyAttribute(element, attribute) as? String
     }
 
+    /// A boolean attribute (`AXMinimized`, `AXHidden`, …). `CFBoolean` does not
+    /// bridge to Swift `Bool` via `as?`, so unwrap it explicitly.
+    static func bool(_ element: AXUIElement, _ attribute: String) -> Bool? {
+        guard let v = copyAttribute(element, attribute),
+              CFGetTypeID(v) == CFBooleanGetTypeID()
+        else { return nil }
+        return CFBooleanGetValue((v as! CFBoolean))
+    }
+
     static func elements(_ element: AXUIElement, _ attribute: String) -> [AXUIElement] {
         (copyAttribute(element, attribute) as? [AXUIElement]) ?? []
     }

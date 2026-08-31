@@ -4,6 +4,34 @@ import ApplicationServices
 /// `--windows` / `--actions` dev helpers. Not part of the contract. Output
 /// goes to stderr so it never contaminates a JSON response.
 enum Debug {
+    /// `--wake` — exercise the serve-mode window wake path with tracing.
+    static func wake() {
+        Bridge.autoManage = true
+        func err(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
+
+        guard let running = KakaoApp.running() else { err("not running"); return }
+        let appRaw = AX.app(pid: running.pid)
+        let ws = AX.elements(appRaw, kAXWindowsAttribute as String)
+        err("windows=\(ws.count)")
+        for (i, w) in ws.enumerated() {
+            err("  [\(i)] title=\(AX.string(w, kAXTitleAttribute as String) ?? "-") "
+                + "minimized=\(String(describing: AX.bool(w, kAXMinimizedAttribute as String))) "
+                + "hidden(app)=\(String(describing: AX.bool(appRaw, kAXHiddenAttribute as String)))")
+        }
+        do {
+            try WindowControl.ensureAwake()
+            err("ensureAwake OK")
+        } catch let e as BridgeError {
+            err("ensureAwake threw \(e.code.rawValue) \(e.diagnostic ?? "")")
+        } catch { err("ensureAwake threw \(error)") }
+
+        let after = AX.elements(appRaw, kAXWindowsAttribute as String)
+        for (i, w) in after.enumerated() {
+            err("  after [\(i)] minimized=\(String(describing: AX.bool(w, kAXMinimizedAttribute as String)))"
+                + " children=\(AX.elements(w, kAXChildrenAttribute as String).count)")
+        }
+    }
+
     static func windows() {
         guard let ctx = try? Bridge.context() else {
             FileHandle.standardError.write(Data("cannot get context\n".utf8))

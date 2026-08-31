@@ -44,6 +44,10 @@ pub enum UiEvent {
     SendUnknown,
     Notice(String),
     Warn(String),
+    /// KakaoTalk is unreachable — showing the cached, read-only view.
+    Offline(String),
+    /// KakaoTalk became reachable again.
+    Online,
     Disconnected(String),
 }
 
@@ -54,6 +58,7 @@ pub fn run(
     events: Sender<UiEvent>,
 ) {
     let mut active: Option<Room> = None;
+    let mut offline = false;
 
     loop {
         match jobs.try_recv() {
@@ -61,7 +66,7 @@ pub fn run(
                 adapter.shutdown();
                 return;
             }
-            Ok(job) => handle(job, adapter.as_mut(), &conn, &mut active, &events),
+            Ok(job) => handle(job, adapter.as_mut(), &conn, &mut active, &mut offline, &events),
             Err(TryRecvError::Empty) => {}
         }
 
@@ -92,6 +97,7 @@ fn handle(
     adapter: &mut dyn StreamAdapter,
     conn: &Connection,
     active: &mut Option<Room>,
+    offline: &mut bool,
     events: &Sender<UiEvent>,
 ) {
     let emit = |e: UiEvent| {
@@ -99,22 +105,46 @@ fn handle(
     };
 
     match job {
+        // Any failure to read the live list drops to the cached, read-only
+        // view rather than leaving the user with nothing. The real error is
+        // shown; the next /rooms or /switch retries live.
         Job::ListRooms => match adapter.list_rooms() {
             Ok(listing) => {
                 let _ = db::upsert_rooms(conn, &listing.rooms);
+                if *offline {
+                    *offline = false;
+                    emit(UiEvent::Online);
+                }
                 emit(UiEvent::Rooms(listing.rooms));
             }
-            Err(e) => emit(UiEvent::Warn(e.user_message())),
+            Err(e) => {
+                *offline = true;
+                let cached = db::cached_rooms(conn).unwrap_or_default();
+                emit(UiEvent::Rooms(cached));
+                emit(UiEvent::Offline(e.user_message()));
+            }
         },
 
         Job::Switch { query, exact } => {
             let rooms = match adapter.list_rooms() {
-                Ok(l) => l.rooms,
-                Err(e) => return emit(UiEvent::Warn(e.user_message())),
+                Ok(l) => {
+                    if *offline {
+                        *offline = false;
+                        emit(UiEvent::Online);
+                    }
+                    l.rooms
+                }
+                Err(e) => {
+                    *offline = true;
+                    emit(UiEvent::Offline(e.user_message()));
+                    db::cached_rooms(conn).unwrap_or_default()
+                }
             };
             let _ = db::upsert_rooms(conn, &rooms);
             match resolve::resolve_in_list(&rooms, conn, &query, exact) {
-                Ok(Resolution::One(room)) => do_switch(room, adapter, conn, active, events),
+                Ok(Resolution::One(room)) => {
+                    do_switch(room, adapter, conn, active, *offline, events)
+                }
                 Ok(Resolution::Many(candidates)) => emit(UiEvent::Ambiguous(candidates)),
                 Ok(Resolution::None { query, near }) => {
                     emit(UiEvent::SwitchFailed { query, near })
@@ -123,12 +153,17 @@ fn handle(
             }
         }
 
-        Job::SwitchTo(room) => do_switch(room, adapter, conn, active, events),
+        Job::SwitchTo(room) => do_switch(room, adapter, conn, active, *offline, events),
 
         Job::Send(body) => {
             let Some(room) = active.clone() else {
                 return emit(UiEvent::Notice("먼저 방을 선택하세요.".into()));
             };
+            if *offline {
+                return emit(UiEvent::SendFailed(
+                    "오프라인 — 카카오톡을 실행하면 전송할 수 있습니다.".into(),
+                ));
+            }
             match send::send_in_room(adapter, conn, &room.room_id, &room.title, &body, 2000) {
                 Ok(outcome) => match outcome.status {
                     SendStatus::Sent => emit(UiEvent::Sent { at: outcome.at }),
@@ -175,8 +210,17 @@ fn do_switch(
     adapter: &mut dyn StreamAdapter,
     conn: &Connection,
     active: &mut Option<Room>,
+    offline: bool,
     events: &Sender<UiEvent>,
 ) {
+    // Offline: cached transcript only — no open/watch, sending is blocked.
+    if offline {
+        let history = db::recent_messages(conn, &room.room_id, 40).unwrap_or_default();
+        *active = Some(room.clone());
+        let _ = events.send(UiEvent::Switched { room, history });
+        return;
+    }
+
     let _ = adapter.unwatch();
 
     if let Err(e) = adapter.open_room(&room.room_id) {

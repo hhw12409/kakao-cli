@@ -117,16 +117,24 @@ fn event_loop(
     }
 }
 
-/// Mirrors `commands::ready_adapter`'s first-run handling for the TUI entry.
+/// First-run gate for the TUI. Only blocks on things the session genuinely
+/// cannot work around: accessibility permission and an unsupported app version.
+/// KakaoTalk not running is fine — the bridge launches it, and failing that the
+/// TUI opens in the cached, read-only view.
 fn onboarding_gate(h: &Health) -> Option<AppError> {
-    if h.kakao_running && h.accessibility_granted {
-        return None;
-    }
-    let code = h
-        .issues
-        .first()
-        .map(|i| i.code)
-        .unwrap_or(ErrorCode::KakaoNotRunning);
+    let blocker = h.issues.iter().map(|i| i.code).find(|c| {
+        matches!(
+            c,
+            ErrorCode::AccessibilityPermissionDenied | ErrorCode::AppVersionUnsupported
+        )
+    });
+    let code = blocker.or({
+        if h.accessibility_granted {
+            None
+        } else {
+            Some(ErrorCode::AccessibilityPermissionDenied)
+        }
+    })?;
     let detail = crate::render::render_doctor(h);
     Some(AppError::Onboarding {
         code,

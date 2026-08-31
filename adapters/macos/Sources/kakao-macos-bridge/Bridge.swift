@@ -17,6 +17,13 @@ import AppKit
 /// the Dock icon" recovery hint.
 enum Bridge {
 
+    /// Serve mode sets this: the bridge may launch KakaoTalk and un-minimise /
+    /// reopen its window, and restores that on shutdown. One-shot dispatch
+    /// (`doctor`) leaves it false — it only ever reports state.
+    static var autoManage = false
+    /// How KakaoTalk looked before serve mode first touched it.
+    static var priorState: WindowControl.PriorState?
+
     struct Context {
         let appRaw: AXUIElement
         let selectors: SelectorMap
@@ -25,6 +32,12 @@ enum Bridge {
     }
 
     static func context() throws -> Context {
+        // In serve mode: launch KakaoTalk / un-minimise / reopen its window as
+        // needed. No-op (fast path) once it's already readable. Throws the same
+        // KAKAO_* codes as before when it can't get there.
+        if autoManage {
+            try WindowControl.ensureAwake()
+        }
         guard let running = KakaoApp.running() else { throw BridgeError(.kakaoNotRunning) }
         guard AX.isTrusted() else { throw BridgeError(.accessibilityPermissionDenied) }
         let version = KakaoApp.version(of: running)
@@ -480,12 +493,20 @@ enum Bridge {
     // MARK: healthCheck
 
     static func healthCheck() -> Health {
+        // Serve mode: try to bring KakaoTalk up first so health reflects what
+        // the session will actually see. Best effort — errors just mean the
+        // report below says "not running".
+        if autoManage { try? WindowControl.ensureAwake() }
+
         guard let running = KakaoApp.running() else {
             return Health(
                 kakaoRunning: false,
                 accessibilityGranted: AX.isTrusted(),
                 appVersion: nil,
-                issues: [Issue(code: .kakaoNotRunning, recovery: "카카오톡 데스크톱 앱을 실행하세요.")]
+                issues: [Issue(code: .kakaoNotRunning,
+                               recovery: autoManage
+                                   ? "카카오톡에 로그인되어 있는지 확인하세요. kakao-cli 가 앱을 대신 실행합니다."
+                                   : "카카오톡 데스크톱 앱을 실행하세요.")]
             )
         }
         let trusted = AX.isTrusted()

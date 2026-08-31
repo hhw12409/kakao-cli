@@ -215,6 +215,39 @@ pub fn recent_messages(conn: &Connection, room_id: &str, limit: u32) -> AppResul
     Ok(rows)
 }
 
+/// The last-synced room list, in listing order. Used for the read-only view
+/// when KakaoTalk can't be reached.
+pub fn cached_rooms(conn: &Connection) -> AppResult<Vec<Room>> {
+    let mut stmt = conn.prepare(
+        "SELECT room_id, title, member_count, unread_count,
+                last_message_text, last_message_at, last_message_sender
+         FROM rooms ORDER BY list_order, title",
+    )?;
+    let rows = stmt
+        .query_map([], |r| {
+            let text: Option<String> = r.get(4)?;
+            let at: Option<String> = r.get(5)?;
+            let sender: Option<String> = r.get(6)?;
+            let last_message = match (text, at) {
+                (Some(text), Some(at)) => Some(kakao_contract::LastMessage {
+                    text,
+                    at,
+                    sender: sender.unwrap_or_default(),
+                }),
+                _ => None,
+            };
+            Ok(Room {
+                room_id: r.get(0)?,
+                title: r.get(1)?,
+                member_count: r.get(2)?,
+                unread_count: r.get::<_, Option<i64>>(3)?.unwrap_or(0) as u32,
+                last_message,
+            })
+        })?
+        .collect::<Result<_, _>>()?;
+    Ok(rows)
+}
+
 // --------------------------------------------------------------------------
 // aliases
 // --------------------------------------------------------------------------

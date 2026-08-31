@@ -21,6 +21,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -63,9 +64,23 @@ pub struct MockStreamAdapter {
     incoming: Vec<Scripted>,
     health: Health,
     forced_send: Option<SendResult>,
+    /// When set, `list_rooms` / `open_room` fail with this code — used to
+    /// exercise the offline / cached-view path. Shared so a test can flip it
+    /// after the adapter has moved into the worker thread.
+    unavailable: Arc<Mutex<Option<kakao_contract::ErrorCode>>>,
     watched: Option<String>,
     tx: Sender<StreamEvent>,
     rx: Receiver<StreamEvent>,
+}
+
+/// Handle a test keeps to toggle [`MockStreamAdapter`] availability at runtime.
+#[derive(Clone)]
+pub struct MockAvailability(Arc<Mutex<Option<kakao_contract::ErrorCode>>>);
+
+impl MockAvailability {
+    pub fn set(&self, code: Option<kakao_contract::ErrorCode>) {
+        *self.0.lock().unwrap() = code;
+    }
 }
 
 impl MockStreamAdapter {
@@ -91,19 +106,31 @@ impl MockStreamAdapter {
                 issues: vec![],
             }),
             forced_send: fx.send_text,
+            unavailable: Arc::new(Mutex::new(None)),
             watched: None,
             tx,
             rx,
         })
     }
+
+    /// A handle to flip KakaoTalk availability from a test.
+    pub fn availability(&self) -> MockAvailability {
+        MockAvailability(Arc::clone(&self.unavailable))
+    }
 }
 
 impl StreamAdapter for MockStreamAdapter {
     fn list_rooms(&mut self) -> AppResult<ListRoomsData> {
+        if let Some(code) = *self.unavailable.lock().unwrap() {
+            return Err(AppError::adapter(code));
+        }
         Ok(ListRoomsData { rooms: self.rooms.clone() })
     }
 
     fn open_room(&mut self, room_id: &str) -> AppResult<()> {
+        if let Some(code) = *self.unavailable.lock().unwrap() {
+            return Err(AppError::adapter(code));
+        }
         if self.rooms.iter().any(|r| r.room_id == room_id) {
             Ok(())
         } else {

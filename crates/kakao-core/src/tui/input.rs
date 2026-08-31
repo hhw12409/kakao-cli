@@ -236,7 +236,7 @@ mod tests {
         let mut app = App::new();
         app.rooms = vec![room("row:0", "가족")];
         app.rooms_loading = false;
-        app.edit_filter(|f| f.push_str("가"));
+        app.edit_filter(|f| f.push('가'));
 
         // First Esc: drop the filter.
         assert!(matches!(handle(&mut app, key(KeyCode::Esc)), Action::None));

@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use kakao_core::adapter::MockStreamAdapter;
+use kakao_core::adapter::{MockAvailability, MockStreamAdapter};
 use kakao_core::db;
 use kakao_core::tui::app::{App, Line, Screen};
 use kakao_core::tui::worker::{self, Job, UiEvent};
@@ -22,17 +22,25 @@ struct Harness {
 
 impl Harness {
     fn start() -> Self {
-        let adapter = Box::new(MockStreamAdapter::from_fixture_str(FIXTURE).unwrap());
+        Self::start_returning_availability().0
+    }
+
+    fn start_returning_availability() -> (Self, MockAvailability) {
+        let adapter = MockStreamAdapter::from_fixture_str(FIXTURE).unwrap();
+        let availability = adapter.availability();
         let conn = db::open_in_memory().unwrap();
         let (job_tx, job_rx) = mpsc::channel();
         let (evt_tx, evt_rx) = mpsc::channel();
-        let worker = thread::spawn(move || worker::run(adapter, conn, job_rx, evt_tx));
-        Harness {
-            jobs: job_tx,
-            events: evt_rx,
-            app: App::new(),
-            worker: Some(worker),
-        }
+        let worker = thread::spawn(move || worker::run(Box::new(adapter), conn, job_rx, evt_tx));
+        (
+            Harness {
+                jobs: job_tx,
+                events: evt_rx,
+                app: App::new(),
+                worker: Some(worker),
+            },
+            availability,
+        )
     }
 
     /// Pump events into the app until `pred` holds or we time out.
@@ -111,6 +119,42 @@ fn room_list_navigate_open_receive_send() {
     // Esc-equivalent: back to the room list.
     h.app.open_room_list();
     assert_eq!(h.app.screen, Screen::Rooms);
+}
+
+#[test]
+fn offline_falls_back_to_cached_rooms_then_recovers() {
+    use kakao_contract::ErrorCode;
+    let (mut h, availability) = Harness::start_returning_availability();
+
+    // Online sync populates the cache.
+    h.jobs.send(Job::ListRooms).unwrap();
+    h.pump_until("online room list", |a| {
+        !a.rooms_loading && a.rooms.iter().any(|r| r.title == "가족")
+    });
+
+    // KakaoTalk goes away; the next list drops to the cached, read-only view.
+    availability.set(Some(ErrorCode::KakaoNotRunning));
+    h.jobs.send(Job::ListRooms).unwrap();
+    h.pump_until("offline cached view", |a| a.offline && !a.rooms.is_empty());
+
+    // Opening a room offline still shows cached history; sending is refused.
+    let job = {
+        h.app.edit_filter(|f| f.push_str("가족"));
+        h.app.enter_selected().expect("cached room highlighted")
+    };
+    h.jobs.send(job).unwrap();
+    h.pump_until("cached transcript", |a| {
+        a.screen == Screen::Chat && a.status.starts_with("캐시")
+    });
+    h.jobs.send(Job::Send("보낼 수 있나".into())).unwrap();
+    h.pump_until("send refused offline", |a| {
+        a.status.starts_with('✗') || a.lines.iter().any(|l| matches!(l, Line::System(s) if s.contains("오프라인")))
+    });
+
+    // KakaoTalk comes back.
+    availability.set(None);
+    h.jobs.send(Job::ListRooms).unwrap();
+    h.pump_until("back online", |a| !a.offline);
 }
 
 #[test]

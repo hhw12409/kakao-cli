@@ -60,6 +60,8 @@ pub struct App {
     pub status: String,
     pub picker: Option<Picker>,
     pub connected: bool,
+    /// KakaoTalk unreachable — rooms/transcript are the cached copy, sending off.
+    pub offline: bool,
     pub should_quit: bool,
 }
 
@@ -175,7 +177,25 @@ impl App {
                         self.push_message(m);
                     }
                 }
-                self.status = format!("연결됨 · {}", room.title);
+                if self.offline {
+                    self.push_system("(캐시 — 카카오톡을 실행하면 최신 메시지를 불러옵니다)");
+                    self.status = format!("캐시 · {}", room.title);
+                } else {
+                    self.status = format!("연결됨 · {}", room.title);
+                }
+            }
+            UiEvent::Offline(reason) => {
+                self.offline = true;
+                self.connected = true;
+                self.push_system(format!("오프라인: {reason}"));
+                self.push_system("캐시된 방 목록을 표시합니다. 카카오톡을 실행하면 자동으로 연결됩니다.");
+                self.status = "오프라인 — 캐시 (읽기 전용)".into();
+            }
+            UiEvent::Online => {
+                if self.offline {
+                    self.offline = false;
+                    self.push_system("카카오톡에 연결되었습니다.");
+                }
             }
             UiEvent::Ambiguous(rooms) => {
                 self.picker = Some(Picker {
@@ -245,5 +265,47 @@ impl App {
          \x20 /help                  이 도움말\n\
          \x20 /quit                  종료\n\
          그 밖의 입력 + Enter = 현재 방으로 전송.  Esc = 방 목록,  PgUp/PgDn 스크롤,  Ctrl-C 종료."
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn room(id: &str, title: &str) -> Room {
+        Room {
+            room_id: id.into(),
+            title: title.into(),
+            member_count: None,
+            unread_count: 0,
+            last_message: None,
+        }
+    }
+
+    #[test]
+    fn offline_then_online_toggles_state_and_narrates() {
+        let mut app = App::new();
+        app.apply(UiEvent::Offline("카카오톡이 실행되지 않았습니다.".into()));
+        assert!(app.offline);
+        assert!(app.status.contains("오프라인"));
+
+        // A cached room list still lands.
+        app.apply(UiEvent::Rooms(vec![room("row:0", "가족")]));
+        assert_eq!(app.rooms.len(), 1);
+
+        // Opening a room while offline marks the transcript as cached.
+        app.apply(UiEvent::Switched {
+            room: room("row:0", "가족"),
+            history: vec![],
+        });
+        assert_eq!(app.screen, Screen::Chat);
+        assert!(app.status.starts_with("캐시"));
+        assert!(app
+            .lines
+            .iter()
+            .any(|l| matches!(l, Line::System(s) if s.contains("캐시"))));
+
+        app.apply(UiEvent::Online);
+        assert!(!app.offline);
     }
 }
