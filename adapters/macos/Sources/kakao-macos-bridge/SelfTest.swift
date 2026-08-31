@@ -73,6 +73,17 @@ enum SelfTest {
         check(KoreanTime.toISO("어제", now: now).hasSuffix("Z"), "어제 -> ISO date")
         check(KoreanTime.toISO("", now: now) == "", "empty label -> empty ISO")
 
+        print("version selector map")
+        check(SelectorMap.forVersion("26.5.0")?.roomTableIdentifier == "_NS:63",
+              "26.5.0 resolves to a map (chat-list selectors verified live)")
+        check(SelectorMap.forVersion("26.5.0")?.chatListTabIdentifier == "chatrooms",
+              "26.5 knows the 채팅 tab button id")
+        check(SelectorMap.forVersion("29.9.9")?.roomTableIdentifier == "_NS:63",
+              "unknown version falls back to the default map")
+        // The 26.5 chat-list fields match 26.6 (verified with --probe-rooms).
+        let m5 = Parsers.rooms(in: mainWindow, selectors: SelectorMap.v26_5, now: now)
+        check(m5.map(\.title) == rooms.map(\.title), "26.5 map parses the fixture identically to 26.6")
+
         print("contract shape")
         let sr = SendResult(status: .unknown, at: nil, error: .sendVerifyTimeout)
         let json = (try? JSONEncoder().encode(sr)).flatMap { String(data: $0, encoding: .utf8) } ?? ""

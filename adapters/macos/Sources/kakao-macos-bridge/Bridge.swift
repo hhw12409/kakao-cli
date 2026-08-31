@@ -110,6 +110,52 @@ enum Bridge {
     /// most recent rooms (the list is already in recency order).
     static let rowScanLimit = 40
 
+    /// The chat-list table, selecting the 채팅 tab first if it isn't in the
+    /// tree yet (KakaoTalk drops it while another left-rail tab is active —
+    /// seen on 26.5). Throws `UI_ELEMENT_NOT_FOUND` only if it's still missing.
+    static func roomTable(_ ctx: Context) throws -> AXElement {
+        let main = try mainWindow(ctx)
+        if let t = findTable(main, identifier: ctx.selectors.roomTableIdentifier) {
+            return t
+        }
+        if let tab = findByIdentifier(
+            main, ctx.selectors.chatListTabIdentifier, role: "AXButton", maxDepth: 8
+        ) {
+            AX.perform(tab.raw, "AXPress")
+        }
+        let deadline = Date().addingTimeInterval(2.0)
+        repeat {
+            Thread.sleep(forTimeInterval: 0.2)
+            if let t = findTable(try mainWindow(ctx), identifier: ctx.selectors.roomTableIdentifier) {
+                return t
+            }
+        } while Date() < deadline
+        throw BridgeError(.uiElementNotFound, "chat table \(ctx.selectors.roomTableIdentifier)")
+    }
+
+    /// Bounded breadth search for the first element with `identifier` (and,
+    /// optionally, `role`). Stops at `maxDepth` so it stays cheap near the top
+    /// of a window even when the full tree is huge.
+    static func findByIdentifier(
+        _ root: AXElement, _ identifier: String, role: String? = nil, maxDepth: Int
+    ) -> AXElement? {
+        var frontier = [root.raw]
+        var depth = 0
+        while !frontier.isEmpty, depth <= maxDepth {
+            var next: [AXUIElement] = []
+            for el in frontier {
+                let v = AX.multi(el, [kAXRoleAttribute as String, kAXIdentifierAttribute as String])
+                if v[1] as? String == identifier, role == nil || v[0] as? String == role {
+                    return AXElement(raw: el)
+                }
+                next.append(contentsOf: AX.elements(el, kAXChildrenAttribute as String))
+            }
+            frontier = next
+            depth += 1
+        }
+        return nil
+    }
+
     /// Direct navigation to an `AXTable` by identifier under `window`, without a
     /// recursive `firstDescendant` walk (which would cost hundreds of AX calls).
     static func findTable(_ window: AXElement, identifier: String) -> AXElement? {
@@ -140,10 +186,7 @@ enum Bridge {
         guard let idx = rowIndex(from: roomId) else {
             throw BridgeError(.roomNotFound, "unrecognised roomId \(roomId)")
         }
-        let main = try mainWindow(ctx)
-        guard let table = findTable(main, identifier: ctx.selectors.roomTableIdentifier) else {
-            throw BridgeError(.uiElementNotFound, "chat table \(ctx.selectors.roomTableIdentifier)")
-        }
+        let table = try roomTable(ctx)
         let rowEls = AX.elements(table.raw, kAXChildrenAttribute as String)
         guard idx < rowEls.count else {
             throw BridgeError(.roomNotFound, "row \(idx) of \(rowEls.count)")
@@ -220,10 +263,7 @@ enum Bridge {
 
     static func listRooms() throws -> ListRoomsData {
         let ctx = try context()
-        let main = try mainWindow(ctx)
-        guard let table = findTable(main, identifier: ctx.selectors.roomTableIdentifier) else {
-            throw BridgeError(.uiElementNotFound, "chat table \(ctx.selectors.roomTableIdentifier)")
-        }
+        let table = try roomTable(ctx)
         // Snapshot the first N rows in batched reads, then parse in memory.
         let rowEls = AX.elements(table.raw, kAXChildrenAttribute as String).prefix(rowScanLimit)
         let rows = rowEls.map { AXElement(raw: $0).snapshot(maxDepth: 3) }

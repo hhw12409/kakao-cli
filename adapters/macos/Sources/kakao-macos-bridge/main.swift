@@ -42,6 +42,24 @@ if args.first == "--wake" {
     exit(0)
 }
 
+// Debug: locate the chat-list table + row field identifiers (selector map work).
+if args.first == "--probe-rooms" {
+    Debug.probeRooms()
+    exit(0)
+}
+
+// Debug: AXPress a button by identifier. `--press friends`
+if args.first == "--press" {
+    Debug.press(args.count > 1 ? args[1] : "")
+    exit(0)
+}
+
+// Debug: map the open-conversation pane (message table / compose / send).
+if args.first == "--probe-convo" {
+    Debug.probeConvo()
+    exit(0)
+}
+
 // Debug: show the AXActions available on a chat-list row. `--actions row:3`
 if args.first == "--actions" {
     Debug.actions(roomId: args.count > 1 ? args[1] : "row:0")

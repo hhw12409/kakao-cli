@@ -16,6 +16,9 @@ struct SelectorMap {
     var mainWindowIdentifier: String
     /// Title of the main window (fallback when the identifier is absent).
     var mainWindowTitle: String
+    /// `AXIdentifier` of the left-rail "채팅"(chat list) tab button. The chat
+    /// table is only in the AX tree while this tab is selected.
+    var chatListTabIdentifier: String
     /// `AXIdentifier` of the AXTable holding chat rows.
     var roomTableIdentifier: String
     /// Within a room `AXCell`: identifier of the title static text.
@@ -56,6 +59,7 @@ struct SelectorMap {
     static let v26_6 = SelectorMap(
         mainWindowIdentifier: "Main Window",
         mainWindowTitle: "카카오톡",
+        chatListTabIdentifier: "chatrooms",
         roomTableIdentifier: "_NS:63",
         roomTitleIdentifier: "_NS:40",
         roomMemberCountIdentifier: "Count Label",
@@ -68,10 +72,31 @@ struct SelectorMap {
         sendButtonTitle: "전송"
     )
 
-    /// `"*"` = development default, also used as the fallback for unknown
-    /// versions. Currently equals the 26.6 map.
+    /// KakaoTalk 26.5.0 — verified with `--probe-rooms` against a real install.
+    /// Chat-list selectors are identical to 26.6; the visible difference is that
+    /// the chat table is absent from the tree unless the 채팅 tab is selected,
+    /// which the bridge now does before reading. Message-window / compose
+    /// selectors are inherited from 26.6 and still need a live conversation dump.
+    static let v26_5 = SelectorMap(
+        mainWindowIdentifier: "Main Window",
+        mainWindowTitle: "카카오톡",
+        chatListTabIdentifier: "chatrooms",
+        roomTableIdentifier: "_NS:63",
+        roomTitleIdentifier: "_NS:40",
+        roomMemberCountIdentifier: "Count Label",
+        roomTimestampIdentifier: "_NS:69",
+        roomPreviewIdentifier: "_NS:91",
+        messageScrollAreaIdentifier: "_NS:29",
+        messageTableIdentifier: "_NS:33",
+        composeFieldIdentifier: "_NS:51",
+        composeFieldDescription: "메시지 입력",
+        sendButtonTitle: "전송"
+    )
+
+    /// `"*"` = development default / fallback for unknown versions.
     static let known: [String: SelectorMap] = [
         "*": v26_6,
         "26.6": v26_6,
+        "26.5": v26_5,
     ]
 }
